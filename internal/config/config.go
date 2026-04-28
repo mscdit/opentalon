@@ -482,6 +482,7 @@ func Parse(data []byte) (*Config, error) {
 	} else {
 		cfg.State.DataDir = expandTilde(expandEnv(cfg.State.DataDir))
 	}
+	cfg.State.DB.DSN = expandEnv(cfg.State.DB.DSN)
 	if cfg.Log.Level != "" {
 		cfg.Log.Level = expandEnv(cfg.Log.Level)
 	}
