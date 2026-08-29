@@ -30,7 +30,7 @@ func (s *stubSessionStore) Get(id string) (*state.Session, error) {
 	return &cp, nil
 }
 
-func (s *stubSessionStore) Create(id, entityID, groupID, kind string) *state.Session {
+func (s *stubSessionStore) Create(id, entityID, groupID, kind, systemSource string) *state.Session {
 	sess := &state.Session{ID: id, Messages: []provider.Message{}}
 	s.sessions[id] = sess
 	return sess
@@ -114,7 +114,7 @@ func (e *sessionNotFoundError) Error() string { return "session not found: " + e
 
 func TestCachedSessionStore_GetCachesOnHit(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create("s1", "", "", "", "")
 	cached := newCachedSessionStore(stub)
 
 	// First Get should hit the inner store.
@@ -144,7 +144,7 @@ func TestCachedSessionStore_GetCachesOnHit(t *testing.T) {
 
 func TestCachedSessionStore_AddMessageUpdatesCache(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create("s1", "", "", "", "")
 	cached := newCachedSessionStore(stub)
 
 	// Populate cache.
@@ -174,7 +174,7 @@ func TestCachedSessionStore_AddMessageUpdatesCache(t *testing.T) {
 
 func TestCachedSessionStore_SetSummaryInvalidatesCache(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create("s1", "", "", "", "")
 	cached := newCachedSessionStore(stub)
 
 	// Populate cache.
@@ -203,7 +203,7 @@ func TestCachedSessionStore_SetSummaryInvalidatesCache(t *testing.T) {
 
 func TestCachedSessionStore_DeleteRemovesFromCache(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create("s1", "", "", "", "")
 	cached := newCachedSessionStore(stub)
 
 	if _, err := cached.Get("s1"); err != nil {
@@ -232,7 +232,7 @@ func TestCachedStore_PromptTypeReachesCache(t *testing.T) {
 	// Create on the INNER store and pull via Get — the cache then holds its own
 	// copy (the stub, like the in-memory store, appends to the same object it
 	// hands out, so caching Create's return value would double-append here).
-	inner.Create("s1", "e", "g", "chat")
+	inner.Create("s1", "e", "g", "chat", "")
 	if _, err := c.Get("s1"); err != nil {
 		t.Fatalf("prime cache: %v", err)
 	}

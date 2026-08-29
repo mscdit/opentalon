@@ -97,14 +97,26 @@ func (s *SessionStore) Get(id string) (*state.Session, error) {
 }
 
 // Create inserts a new session. If id already exists (e.g. race), returns existing session from DB.
-func (s *SessionStore) Create(id, entityID, groupID, kind string) *state.Session {
+//
+// kind is the session's interaction_kind ("chat" | "system"); an empty kind is
+// stored as "chat". systemSource is the per-feature label of the in-app feature
+// that opened the session (migration 016); empty is stored as NULL, which is
+// what an ordinary human chat leaves behind.
+//
+// Both labels are written here and nowhere else: an id that already exists
+// keeps the labels it was created with, because the INSERT conflicts and the
+// existing row is returned untouched. That is what makes a chat session which
+// later receives an injected system turn keep its NULL source while that turn's
+// own usage row carries the feature label.
+func (s *SessionStore) Create(id, entityID, groupID, kind, systemSource string) *state.Session {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if kind == "" {
 		kind = "chat"
 	}
+	source := sql.NullString{String: systemSource, Valid: systemSource != ""}
 	_, err := s.db.SQLDB().Exec(
-		s.db.Dialect().Rebind(`INSERT INTO sessions (id, summary, active_model, metadata, entity_id, group_id, interaction_kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		id, "", "", "{}", entityID, groupID, kind, now, now)
+		s.db.Dialect().Rebind(`INSERT INTO sessions (id, summary, active_model, metadata, entity_id, group_id, interaction_kind, system_source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		id, "", "", "{}", entityID, groupID, kind, source, now, now)
 	if err != nil {
 		if existing, e := s.Get(id); e == nil {
 			return existing

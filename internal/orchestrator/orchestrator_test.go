@@ -129,7 +129,7 @@ func setupOrchestrator(llm LLMClient, parser ToolCallParser) (*Orchestrator, str
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create("test-session", "", "", "", "")
 
 	orch := New(llm, parser, registry, memory, sessions)
 	return orch, "test-session"
@@ -368,7 +368,7 @@ func TestOrchestratorSessionHistoryGrows(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	orch := New(llm, parser, registry, memory, sessions)
 	_, _ = orch.Run(context.Background(), "s1", "Hi")
@@ -450,7 +450,7 @@ func TestRunInvokeStepsMultiStepPreviousResult(t *testing.T) {
 	}, &previousResultExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	orch := New(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions)
 
 	steps := []InvokeStep{
@@ -507,7 +507,7 @@ func TestRunInvokeStepsStopsOnError(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	orch := New(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions)
 
 	steps := []InvokeStep{
@@ -582,7 +582,7 @@ func setupGuardOrchestrator(guards []ContentPreparerEntry, llm LLMClient, parser
 	}
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	return NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{ContentPreparers: guards})
 }
 
@@ -660,7 +660,7 @@ func TestGuardRunsBeforeEachLLMCall(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{ContentPreparers: guards})
 
 	result, err := orch.Run(context.Background(), "s1", "analyze code")
@@ -685,7 +685,7 @@ func TestGuardMissingPluginBlocksByDefault(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{ContentPreparers: guards})
 
 	result, err := orch.Run(context.Background(), "s1", "hello")
@@ -708,7 +708,7 @@ func TestGuardMissingPluginFailOpenContinues(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{ContentPreparers: guards})
 
 	result, err := orch.Run(context.Background(), "s1", "hello")
@@ -805,7 +805,7 @@ func TestPreparerAndGuardBothRun(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	preparers := []ContentPreparerEntry{
 		{Plugin: "preparer-plugin", Action: "prepare"},            // regular: first message only
 		{Plugin: "guard-plugin", Action: "sanitize", Guard: true}, // guard: every LLM call
@@ -841,7 +841,7 @@ func TestPreparerReturnsInvokeSingle(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	preparers := []ContentPreparerEntry{{Plugin: "invoker", Action: "prepare", Insecure: false}} // trusted: can invoke
 	orch := NewWithRules(&fakeLLM{responses: []string{"LLM reply"}}, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{ContentPreparers: preparers})
 
@@ -879,7 +879,7 @@ func TestPreparerReturnsInvokeArray(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	preparers := []ContentPreparerEntry{{Plugin: "invoker", Action: "prepare", Insecure: false}} // trusted: can invoke
 	orch := NewWithRules(&fakeLLM{responses: []string{"LLM reply"}}, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{ContentPreparers: preparers})
 
@@ -941,7 +941,7 @@ func setupPipelineOrchestrator(plannerLLM *fakeLLM, agentLLM *fakeLLM) (*Orchest
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create("test-session", "", "", "", "")
 
 	// The planner LLM is used for planning; the agent LLM is used for the normal agent loop.
 	// We use the planner LLM since it's the same LLM interface for both.
@@ -960,7 +960,7 @@ func TestPipelineDisabledNormalFlow(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		PipelineEnabled: false,
@@ -1139,7 +1139,7 @@ func TestInsecurePreparerCannotInvoke(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	llm := &fakeLLM{responses: []string{"LLM reply"}}
 	preparers := []ContentPreparerEntry{
 		{Plugin: "insecure-preparer", Action: "prepare", Insecure: true},
@@ -1167,7 +1167,7 @@ func TestPreparerErrorBlocksByDefault(t *testing.T) {
 	}, &errorReturningExecutor{err: "preparer unavailable"})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	llm := &fakeLLM{responses: []string{"LLM reply"}}
 	preparers := []ContentPreparerEntry{{Plugin: "preparer-plugin", Action: "prepare"}}
 	orch := NewWithRules(llm, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{ContentPreparers: preparers})
@@ -1192,7 +1192,7 @@ func TestPreparerErrorFailOpenContinues(t *testing.T) {
 	}, &errorReturningExecutor{err: "preparer unavailable"})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	llm := &fakeLLM{responses: []string{"LLM reply"}}
 	preparers := []ContentPreparerEntry{{Plugin: "preparer-plugin", Action: "prepare", FailOpen: true}}
 	orch := NewWithRules(llm, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{ContentPreparers: preparers})
@@ -1254,7 +1254,7 @@ func setupUserOnlyOrchestrator(parser ToolCallParser) *Orchestrator {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	return New(&fakeLLM{responses: []string{"ok"}}, parser, registry, memory, sessions)
 }
 
@@ -1399,7 +1399,7 @@ func TestUserOnlyActionBlockedFromLLM(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	callNum := 0
 	parser := &fakeParser{parseFn: func(string) []ToolCall {
 		callNum++
@@ -1454,7 +1454,7 @@ func TestUserOnlyFromLLMFlagSetOnParsedCalls(t *testing.T) {
 	}, captureExec)
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	callNum := 0
 	parser := &fakeParser{parseFn: func(string) []ToolCall {
 		callNum++
@@ -1492,7 +1492,7 @@ func TestUnknownArgsRejectedForLLMCall(t *testing.T) {
 	}, captureExec)
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	callNum := 0
 	parser := &fakeParser{parseFn: func(string) []ToolCall {
 		callNum++
@@ -1538,7 +1538,7 @@ func TestDeclaredArgsAcceptedForLLMCall(t *testing.T) {
 	}, captureExec)
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 	callNum := 0
 	parser := &fakeParser{parseFn: func(string) []ToolCall {
 		callNum++
@@ -1874,7 +1874,7 @@ func setupOrchestratorWithOpts(llm LLMClient, parser ToolCallParser, opts Orches
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session-obs", "", "", "")
+	sessions.Create("test-session-obs", "", "", "", "")
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, opts)
 	return orch, "test-session-obs"
@@ -2061,7 +2061,7 @@ func setupOrchestratorWithFormatters(llm LLMClient, parser ToolCallParser, forma
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create("test-session", "", "", "", "")
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		ResponseFormatters: formatters,
@@ -2220,7 +2220,7 @@ func TestShowToolCallsPrependsInputForDisplay(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create("test-session", "", "", "", "")
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		ShowToolCalls: "raw",
@@ -2258,7 +2258,7 @@ func TestShowToolCallsDisabledDoesNotPrepend(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create("test-session", "", "", "", "")
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		ShowToolCalls: "",
@@ -2305,7 +2305,7 @@ func TestPreparerInjectsAllowedPlugins(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	preparers := []ContentPreparerEntry{{Plugin: "rag-preparer", Action: "prepare"}}
 	orch := NewWithRules(&fakeLLM{responses: []string{"reply"}}, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{ContentPreparers: preparers})
@@ -2367,7 +2367,7 @@ func TestPreparerInjectsAllowedTools(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	preparers := []ContentPreparerEntry{{Plugin: "rag-preparer", Action: "prepare"}}
 	orch := NewWithRules(&fakeLLM{responses: []string{"reply"}}, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{ContentPreparers: preparers})
@@ -2445,7 +2445,7 @@ func TestPreparerInjectsAllowedTools_emptyPaletteIsAlwaysExplicit(t *testing.T) 
 
 		memory := state.NewMemoryStore("")
 		sessions := state.NewSessionStore("")
-		sessions.Create("s1", "", "", "")
+		sessions.Create("s1", "", "", "", "")
 		preparers := []ContentPreparerEntry{{Plugin: "rag-preparer", Action: "prepare"}}
 		orch := NewWithRules(&fakeLLM{responses: []string{"reply"}}, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{ContentPreparers: preparers})
 		return orch, &capturedArgs, &called
@@ -3205,7 +3205,7 @@ func TestStreamingFinalAnswer(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	var mu sync.Mutex
 	var receivedChunks []string
@@ -3251,7 +3251,7 @@ func TestStreamingFallbackToComplete(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	callbackCalled := false
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
@@ -3425,7 +3425,7 @@ func TestServerSideFallbackOnRetryExhaustion(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create("test-session", "", "", "", "")
 
 	orch := NewWithRules(llm, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{
 		PipelineEnabled: true,
@@ -3459,7 +3459,7 @@ func TestPlannerError_FallsThroughWithoutPanic(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	orch := NewWithRules(llm, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{
 		PipelineEnabled: true,
@@ -3499,7 +3499,7 @@ func TestPlannerError_RetryEnabledWithoutPanic(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create("s1", "", "", "", "")
 
 	orch := NewWithRules(llm, &fakeParser{parseFn: func(string) []ToolCall { return nil }}, registry, memory, sessions, OrchestratorOpts{
 		PipelineEnabled: true,

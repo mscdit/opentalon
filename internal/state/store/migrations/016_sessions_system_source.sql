@@ -1,0 +1,38 @@
+-- sessions.system_source: the per-feature label of the in-app feature that
+-- OPENED this session. Nullable, written once at session creation from the
+-- run's Profile — exactly as interaction_kind is (migration 014).
+--
+-- Two placements, decided from two different sources, deliberately decoupled,
+-- the same split migration 014 made for interaction_kind:
+--   sessions.system_source      — which feature opened the whole conversation,
+--                                 set ONCE at session creation. NULL for a
+--                                 human chat and for a session created before
+--                                 this migration.
+--   profile_usage.system_source — which feature drove THIS run, read from the
+--                                 run's Profile at record time (migration 014).
+-- They diverge by design: a backend job that injects a status turn into a
+-- user's existing chat session records its own label on that turn's usage row
+-- while the session stays kind 'chat' with a NULL source — the session was
+-- opened by the person, not by the feature. Deriving the session label from its
+-- usage rows was rejected for exactly that case: no single usage row is the
+-- right answer for an injected session.
+--
+-- So: listing reads the session column (which conversations a feature opened,
+-- and must therefore stay out of a customer's own chat list), costing reads the
+-- usage column (what each turn spent). An extensible string enum; readers treat
+-- any value as opaque.
+--
+-- Portability: TEXT only (no enums / check constraints), nullable. Existing
+-- rows and every ordinary chat session leave it NULL. Runs on SQLite and
+-- PostgreSQL.
+--
+-- Deploy order: the api-plugin reads system_source by name (session-list
+-- projection + filter). Core applies migrations at startup before it loads
+-- plugins, so ship core-with-016 before any api-plugin build that SELECTs the
+-- column (same rule as migrations 013, 014 and 015).
+ALTER TABLE sessions ADD COLUMN system_source TEXT;
+
+-- Session-list filtering by feature (api-plugin read path) — the same reason
+-- migration 014 indexed sessions(interaction_kind), for the same read path.
+CREATE INDEX IF NOT EXISTS idx_sessions_system_source
+  ON sessions(system_source);

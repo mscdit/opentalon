@@ -49,7 +49,7 @@ func notifyTestOrch(t *testing.T, opts OrchestratorOpts) (*Orchestrator, *notify
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("ent1:telegram:42", "ent1", "grp1", "")
+	sessions.Create("ent1:telegram:42", "ent1", "grp1", "", "")
 	sessionPush := newEscPushRecorder()
 	convPush := &convPushRecorder{}
 	opts.ChannelSender = sessionPush.push

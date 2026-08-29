@@ -63,7 +63,7 @@ func escTestOrch(t *testing.T, opts OrchestratorOpts) (*Orchestrator, *escalatio
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "ent1", "grp1", "")
+	sessions.Create("sess", "ent1", "grp1", "", "")
 	llm := &fakeLLM{responses: []string{"Investigated: two items at risk — reorder recommended."}}
 	push := newEscPushRecorder()
 	opts.ChannelSender = push.push

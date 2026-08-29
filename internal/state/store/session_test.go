@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -20,7 +21,7 @@ func TestSessionStore_ClearMessagesPreservesIdentityAndEvents(t *testing.T) {
 	store := NewSessionStore(db, 0, 0)
 
 	const sid = "sess-clear"
-	store.Create(sid, "entity-X", "group-Y", "")
+	store.Create(sid, "entity-X", "group-Y", "", "")
 
 	if err := store.AddMessage(sid, provider.Message{Role: provider.RoleUser, Content: "first"}); err != nil {
 		t.Fatalf("AddMessage[1]: %v", err)
@@ -149,7 +150,7 @@ func TestSessionStore_ClearMessagesIsIdempotent(t *testing.T) {
 	store := NewSessionStore(db, 0, 0)
 
 	const sid = "sess-empty"
-	store.Create(sid, "entity-X", "group-Y", "")
+	store.Create(sid, "entity-X", "group-Y", "", "")
 
 	if err := store.ClearMessages(sid); err != nil {
 		t.Fatalf("first ClearMessages: %v", err)
@@ -163,5 +164,82 @@ func TestSessionStore_ClearMessagesIsIdempotent(t *testing.T) {
 	}
 	if len(after.Messages) != 0 {
 		t.Errorf("Messages len = %d, want 0", len(after.Messages))
+	}
+}
+
+// sessionSystemSource reads the raw sessions.system_source column, which no
+// reader in this repository projects yet (the api-plugin does, one deploy
+// later) — so the write path is asserted directly against the column.
+func sessionSystemSource(t *testing.T, db *DB, sid string) sql.NullString {
+	t.Helper()
+	var src sql.NullString
+	if err := db.SQLDB().QueryRow(
+		db.Dialect().Rebind(`SELECT system_source FROM sessions WHERE id = ?`), sid,
+	).Scan(&src); err != nil {
+		t.Fatalf("read sessions.system_source for %q: %v", sid, err)
+	}
+	return src
+}
+
+// TestSessionStore_CreateStoresSystemSourceOnce pins the session-level feature
+// label: it is written at creation from the run's profile and never afterwards.
+// A second Create for the same id — the idempotent fresh-mint path a
+// reconnecting channel takes — must return the existing row untouched rather
+// than relabel a live conversation with whatever feature happened to call last.
+func TestSessionStore_CreateStoresSystemSourceOnce(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSessionStore(db, 0, 0)
+
+	const sid = "sess-system-source"
+	store.Create(sid, "entity-X", "group-Y", "system", "csv_mapping")
+
+	src := sessionSystemSource(t, db, sid)
+	if !src.Valid || src.String != "csv_mapping" {
+		t.Fatalf("system_source after create = %#v, want valid csv_mapping", src)
+	}
+
+	// Same id, different label: the row already exists, so the insert conflicts
+	// and the original label survives.
+	store.Create(sid, "entity-X", "group-Y", "system", "other_feature")
+	if src := sessionSystemSource(t, db, sid); !src.Valid || src.String != "csv_mapping" {
+		t.Errorf("system_source after second create = %#v, want it unchanged at csv_mapping", src)
+	}
+}
+
+// TestSessionStore_ChatSessionKeepsNullSourceWhenSystemRunInjected guards the
+// two-placement split this column exists for: a human chat session opened by
+// nobody's feature keeps a NULL session source even when a backend feature
+// later injects a run into it — that run's own usage row is what carries the
+// feature label. Collapsing the two (deriving the session label from usage)
+// would mislabel every injected conversation as belonging to the injecting
+// feature and hide it from the customer's own session list.
+func TestSessionStore_ChatSessionKeepsNullSourceWhenSystemRunInjected(t *testing.T) {
+	db := openTestDB(t)
+	sessions := NewSessionStore(db, 0, 0)
+	usage := NewUsageStore(db)
+
+	const sid = "sess-chat-injected"
+	sessions.Create(sid, "entity-1", "group-1", "chat", "")
+
+	if err := usage.Record(context.Background(), UsageRecord{
+		EntityID: "entity-1", GroupID: "group-1", ChannelID: "websocket",
+		SessionID: sid, ModelID: "m1", InputTokens: 10, OutputTokens: 5,
+		InteractionKind: "system", SystemSource: "job_notify",
+	}); err != nil {
+		t.Fatalf("Record injected system run: %v", err)
+	}
+
+	if src := sessionSystemSource(t, db, sid); src.Valid {
+		t.Errorf("session system_source = %q, want NULL (the person opened this session, not the feature)", src.String)
+	}
+
+	var usageSource sql.NullString
+	if err := db.SQLDB().QueryRow(
+		db.Dialect().Rebind(`SELECT system_source FROM profile_usage WHERE session_id = ?`), sid,
+	).Scan(&usageSource); err != nil {
+		t.Fatalf("read profile_usage.system_source: %v", err)
+	}
+	if !usageSource.Valid || usageSource.String != "job_notify" {
+		t.Errorf("usage system_source = %#v, want valid job_notify", usageSource)
 	}
 }
