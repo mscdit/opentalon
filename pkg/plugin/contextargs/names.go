@@ -75,3 +75,20 @@ const (
 	CallbackGroupID   = "__ot_cb_group_id"
 	CallbackSessionID = "__ot_cb_session_id"
 )
+
+// InteractionKind is the kind of run the current turn belongs to, as
+// resolved by the profile verifier (Profile.Kind): "chat" for a
+// human-driven turn, "system" for a backend-originated one. Resolves to
+// the empty string when no profile is loaded (e.g. a profile-less local
+// dev setup); the host never invents a kind, so a consumer that gates on
+// it MUST treat the empty value as "unlabelled" and fall back to whatever
+// it did before labels existed.
+const InteractionKind = "interaction_kind"
+
+// SystemSource is the per-feature label a system run carries
+// (Profile.SystemSource) — the name of the backend feature that opened
+// the run, as the WhoAmI server reported it. Empty for a chat turn and
+// whenever no profile is loaded. A downstream service may use it to give
+// one named run a narrower capability set than an interactive turn; the
+// host only reports the label and enforces nothing itself.
+const SystemSource = "system_source"

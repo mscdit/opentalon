@@ -564,10 +564,23 @@ func resolveAllowedToolFQNs(ctx context.Context, o *Orchestrator) string {
 	return string(b)
 }
 
+// runLabel reads one of the verified profile's run labels off the request
+// context. A nil profile (profile-less dev setup, work outside a verified
+// turn) yields the empty string, which the injection loop then skips — an
+// absent label reaches the plugin as an absent arg, never as a guessed one.
+func runLabel(ctx context.Context, pick func(*profile.Profile) string) string {
+	p := profile.FromContext(ctx)
+	if p == nil {
+		return ""
+	}
+	return pick(p)
+}
+
 // defaultContextArgProviders returns built-in providers for orchestrator-managed
-// arguments: opaque identifiers (session_id, conversation_id) and per-session
-// allowlists derived from the profile (allowed_plugins, allowed_tools). No session
-// messages, conversation text, or other sensitive user content is exposed via this
+// arguments: opaque identifiers (session_id, conversation_id), per-session
+// allowlists derived from the profile (allowed_plugins, allowed_tools), and the
+// run's own labels (interaction_kind, system_source). No session messages,
+// conversation text, or other sensitive user content is exposed via this
 // mechanism.
 func defaultContextArgProviders(o *Orchestrator, custom map[string]ContextArgProvider) map[string]ContextArgProvider {
 	builtin := map[string]ContextArgProvider{
@@ -585,6 +598,19 @@ func defaultContextArgProviders(o *Orchestrator, custom map[string]ContextArgPro
 		},
 		contextargs.AllowedTools: func(ctx context.Context, _ string) string {
 			return resolveAllowedToolFQNs(ctx, o)
+		},
+		// The run's own labels, straight off the verified profile: what kind
+		// of run this is ("chat" | "system") and, for a system run, which
+		// backend feature opened it. A downstream service that gives one named
+		// run a narrower capability set than an interactive turn needs them on
+		// the request, not just in the host's own attribution records. Reported
+		// verbatim — the host neither defaults an empty Kind to "chat" nor
+		// invents a source, so a consumer can tell "unlabelled" from "chat".
+		contextargs.InteractionKind: func(ctx context.Context, _ string) string {
+			return runLabel(ctx, func(p *profile.Profile) string { return p.Kind })
+		},
+		contextargs.SystemSource: func(ctx context.Context, _ string) string {
+			return runLabel(ctx, func(p *profile.Profile) string { return p.SystemSource })
 		},
 	}
 	if len(custom) == 0 {
