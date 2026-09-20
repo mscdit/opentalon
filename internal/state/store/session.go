@@ -174,14 +174,27 @@ func (s *SessionStore) AddMessageWithMetadata(id string, msg provider.Message, m
 		return err
 	}
 
-	tx, err := s.db.SQLDB().BeginTx(ctx, nil)
+	tx, cleanup, err := d.BeginExclusive(ctx, s.db.SQLDB())
 	if err != nil {
 		return fmt.Errorf("add message begin: %w", err)
 	}
+	defer cleanup()
 	defer func() { _ = tx.Rollback() }()
 
-	// Atomically assign next seq in a single statement to avoid race conditions
-	// between concurrent AddMessage calls.
+	// Serialise the writers of one session before the seq is assigned. The
+	// INSERT below computes MAX(seq)+1 in a single statement, which is atomic
+	// on SQLite (BEGIN IMMEDIATE already holds the write lock) but not on
+	// Postgres: two read-committed transactions both read the same MAX and
+	// the second INSERT hits idx_messages_session_seq. Locking the session
+	// row makes the second writer wait and recompute. A session with no row
+	// (nothing to lock) keeps the old single-statement behaviour.
+	var one int
+	if err := tx.QueryRowContext(ctx,
+		d.Rebind(`SELECT 1 FROM sessions WHERE id = ?`+d.ForUpdate()), id,
+	).Scan(&one); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("add message lock: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		d.Rebind(`INSERT INTO messages (session_id, seq, role, content, tool_calls, tool_call_id, metadata, visibility, created_at)
 		SELECT ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, ?, ?, ? FROM messages WHERE session_id = ?`),
