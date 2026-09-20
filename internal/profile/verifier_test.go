@@ -696,3 +696,37 @@ func (s *stubGroupSaver) UpsertGroupPlugins(_ context.Context, groupID string, p
 	s.saved[groupID] = append(s.saved[groupID], pluginIDs...)
 	return nil
 }
+
+// TestVerifier_SourceOnNonSystemRunIsDropped: a source belongs to a system
+// run only. A WhoAmI response that names one without an explicit "system"
+// kind must not become a system run (that would skip the interactive spend
+// limit and allow hidden turns) — the source is dropped and the kind stays.
+func TestVerifier_SourceOnNonSystemRunIsDropped(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		response map[string]interface{}
+		wantKind string
+	}{
+		{"source without kind stays chat", map[string]interface{}{"entity_id": "user-1", "system_source": "csv_mapping"}, KindChat},
+		{"source with an explicit chat kind", map[string]interface{}{"entity_id": "user-1", "kind": "chat", "system_source": "csv_mapping"}, KindChat},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(tc.response)
+			}))
+			defer srv.Close()
+
+			v := NewVerifier(VerifierConfig{URL: srv.URL, CacheTTL: 100 * time.Millisecond}, &stubGroupSaver{saved: map[string][]string{}}, nil)
+			p, err := v.Verify(context.Background(), "tok", "", nil)
+			if err != nil {
+				t.Fatalf("Verify: %v", err)
+			}
+			if p.Kind != tc.wantKind {
+				t.Errorf("Kind = %q, want %q (a source never upgrades the kind)", p.Kind, tc.wantKind)
+			}
+			if p.SystemSource != "" {
+				t.Errorf("SystemSource = %q, want it dropped on a non-system run", p.SystemSource)
+			}
+		})
+	}
+}

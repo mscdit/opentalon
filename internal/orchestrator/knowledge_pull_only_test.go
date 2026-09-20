@@ -30,7 +30,7 @@ func TestOrchestrator_PreparerPhase_EmitsPullOnly(t *testing.T) {
 		Actions: []Action{{Name: "prepare", Description: "Prepare"}},
 	}, &fixedResultExecutor{content: preparerJSON})
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	llm := &capturingLLM{responses: []string{"answer"}}
 	orch := NewWithRules(llm,
 		&fakeParser{parseFn: func(string) []ToolCall { return nil }},

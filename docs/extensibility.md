@@ -89,6 +89,44 @@ Three limits are worth knowing:
   as JSON `null` rather than forwarding it, so a nullable type in your fragment
   does not give the model a way to send an explicit null.
 
+### Context arguments the host injects
+
+An action can ask the host for facts about the request it runs in — facts the
+model never sees and could not be trusted to supply. List the names in the
+action's `inject_context_args` (`InjectContextArgs` in the Go SDK); the host
+adds them to the call's arguments before `Execute`, next to the model's own.
+
+| Name | Value |
+|---|---|
+| `session_id` | The packed session key (`channel:conversation[:thread]`). |
+| `conversation_id` | The bare conversation id the client round-trips. |
+| `entity_id` | The actor identity (the profile's `entity_id`, else `channel:sender`). |
+| `group_id` | The actor's group from the profile. Empty without a profile — fail closed. |
+| `allowed_plugins` | Sorted JSON array of plugin names the profile permits. |
+| `allowed_tools` | Sorted JSON array of `plugin__action` names the session can call right now; `[]` is a real value. |
+| `interaction_kind` | `chat` for a person's turn, `system` for a backend-originated run. |
+| `system_source` | The feature behind a `system` run, as the WhoAmI server named it. |
+
+Three rules apply to every name:
+
+- **Absent means absent.** A value the host cannot resolve (no session, no
+  profile) is not injected at all — never an empty string or a guessed
+  default. A plugin that gates behaviour on a label treats a missing key as
+  "unlabelled" and falls back to what it did before the label existed.
+- **The host owns a declared key.** On an action that lists the name, the
+  host's value replaces anything the caller sent under it, and when the host
+  has nothing the key is removed — a scheduled job's stored args cannot
+  supply one either. An action that does not list the name receives whatever
+  the caller sent, as an ordinary untrusted argument. Do not declare one of
+  these names as a tool parameter; the model's value could never reach you.
+- **Nested callbacks inherit the run.** An action that fires a host
+  `RunAction` callback under a different identity (a scheduled workflow
+  running as its owner) keeps the labels of the verified turn it runs inside;
+  an action started by the dispatcher outside any turn carries none.
+
+The names are constants in `pkg/plugin/contextargs`, shared by the host and Go
+plugins so a typo fails to compile.
+
 ### Message size limits
 
 Tool call arguments travel inline in a single unary gRPC message

@@ -7,11 +7,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/opentalon/opentalon/internal/config"
 	"github.com/opentalon/opentalon/internal/provider"
+	"github.com/opentalon/opentalon/internal/state"
 	"github.com/opentalon/opentalon/internal/state/store/events"
 )
 
@@ -55,15 +57,15 @@ func TestPostgres_OpenAndMigrations(t *testing.T) {
 	if err := db.SQLDB().QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&v); err != nil {
 		t.Fatalf("read schema_version: %v", err)
 	}
-	if v != 15 {
-		t.Errorf("schema_version = %d, want 15", v)
+	if v != 16 {
+		t.Errorf("schema_version = %d, want 16", v)
 	}
 }
 
 func TestPostgres_AddMessageConcurrent(t *testing.T) {
 	db := pgDB(t)
 	store := NewSessionStore(db, 0, 0)
-	store.Create("concurrent-test", "", "", "")
+	store.Create(state.SessionParams{ID: "concurrent-test"})
 
 	const n = 10
 	var wg sync.WaitGroup
@@ -100,7 +102,7 @@ func TestPostgres_AddMessageConcurrent(t *testing.T) {
 func TestPostgres_NativeToolCallsRoundTrip(t *testing.T) {
 	db := pgDB(t)
 	store := NewSessionStore(db, 0, 0)
-	store.Create("tool-call-test", "", "", "")
+	store.Create(state.SessionParams{ID: "tool-call-test"})
 
 	calls := []provider.ToolCall{{
 		ID: "call_pg_1", Name: "tickets.show", Arguments: map[string]string{"id": "42"},
@@ -131,7 +133,7 @@ func TestPostgres_NativeToolCallsRoundTrip(t *testing.T) {
 	}
 
 	// Empty slice must persist as NULL on Postgres as well (no "[]" sentinel).
-	store.Create("empty-tool-calls", "", "", "")
+	store.Create(state.SessionParams{ID: "empty-tool-calls"})
 	if err := store.AddMessage("empty-tool-calls", provider.Message{
 		Role: provider.RoleAssistant, Content: "no tools", ToolCalls: []provider.ToolCall{},
 	}); err != nil {
@@ -202,5 +204,78 @@ func TestPostgres_SessionEventStoreRoundTrip(t *testing.T) {
 	}
 	if content != "first" {
 		t.Errorf("content = %q, want %q (idempotent ON CONFLICT DO NOTHING)", content, "first")
+	}
+}
+
+// The session labels cross the Postgres driver as sql.NullString: "" must
+// land as NULL (no "" sentinel, the same rule the empty tool_calls test pins),
+// a value as itself, and the id conflict must keep the first writer's label.
+// Migration 016's partial index has to exist on this dialect too.
+func TestPostgres_SessionSystemSourceRoundTrip(t *testing.T) {
+	db := pgDB(t)
+	store := NewSessionStore(db, 0, 0)
+
+	store.Create(state.SessionParams{ID: "pg-chat", EntityID: "e1", GroupID: "g1", Kind: "chat"})
+	store.Create(state.SessionParams{ID: "pg-sys", EntityID: "e1", GroupID: "g1", Kind: "system", SystemSource: "csv_mapping"})
+	store.Create(state.SessionParams{ID: "pg-sys", EntityID: "e1", GroupID: "g1", Kind: "system", SystemSource: "other_feature"})
+
+	if src := sessionSystemSource(t, db, "pg-chat"); src.Valid {
+		t.Errorf("chat session system_source = %q, want NULL", src.String)
+	}
+	if src := sessionSystemSource(t, db, "pg-sys"); !src.Valid || src.String != "csv_mapping" {
+		t.Errorf("system session system_source = %#v, want the first writer's csv_mapping", src)
+	}
+
+	var indexdef string
+	if err := db.SQLDB().QueryRow(
+		`SELECT indexdef FROM pg_indexes WHERE tablename = 'sessions' AND indexname = 'idx_sessions_system_source'`,
+	).Scan(&indexdef); err != nil {
+		t.Fatalf("idx_sessions_system_source missing on postgres: %v", err)
+	}
+	if !strings.Contains(indexdef, "IS NOT NULL") {
+		t.Errorf("indexdef = %q, want a partial index (WHERE system_source IS NOT NULL)", indexdef)
+	}
+}
+
+// Every transcript writer takes the sessions row before any messages row.
+// With the cap on, AddMessage also deletes old rows, so an AddMessage racing
+// a SetSummary or ClearMessages (which delete and re-insert or wipe the
+// transcript) would deadlock on Postgres if they took their locks in
+// opposite orders: Postgres then aborts one side with "deadlock detected".
+// Hammer all three paths on one session and require that no write fails.
+func TestPostgres_TranscriptWritersShareOneLockOrder(t *testing.T) {
+	db := pgDB(t)
+	store := NewSessionStore(db, 5, 0) // cap on, so AddMessage trims
+	store.Create(state.SessionParams{ID: "lock-order"})
+
+	const rounds = 40
+	var wg sync.WaitGroup
+	errs := make(chan error, rounds*3)
+	for i := 0; i < rounds; i++ {
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			if err := store.ClearMessages("lock-order"); err != nil {
+				errs <- err
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if err := store.AddMessage("lock-order", provider.Message{Role: provider.RoleUser, Content: "msg"}); err != nil {
+				errs <- err
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			kept := []provider.Message{{Role: provider.RoleAssistant, Content: "summary-kept"}}
+			if err := store.SetSummary("lock-order", "summary", kept); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("transcript write failed: %v", err)
 	}
 }

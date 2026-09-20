@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/opentalon/opentalon/internal/actor"
+	"github.com/opentalon/opentalon/internal/profile"
 	"github.com/opentalon/opentalon/pkg/plugin/contextargs"
 )
 
@@ -47,5 +48,60 @@ func TestDefaultContextArgProviders_GroupEntity(t *testing.T) {
 	}
 	if got := entity(ctxNoGroup, contextargs.EntityID); got != "console:u1" {
 		t.Errorf("entity_id = %q, want console:u1", got)
+	}
+}
+
+// TestDefaultContextArgProviders_RunLabels locks in the run-label wiring:
+// interaction_kind / system_source resolve off the profile as stored and are
+// EMPTY when no profile is on the context — so an unlabelled run reaches a
+// plugin as an absent arg rather than a guessed one. (The verifier never
+// produces an empty Kind; the last case pins that the provider does not
+// paper over a hand-built profile that has none.)
+func TestDefaultContextArgProviders_RunLabels(t *testing.T) {
+	providers := defaultContextArgProviders(nil, nil)
+
+	kind := providers[contextargs.InteractionKind]
+	source := providers[contextargs.SystemSource]
+	if kind == nil || source == nil {
+		t.Fatal("interaction_kind/system_source providers not registered")
+	}
+
+	cases := []struct {
+		name       string
+		profile    *profile.Profile
+		wantKind   string
+		wantSource string
+	}{
+		{name: "no profile", profile: nil},
+		{
+			name:     "chat turn carries a kind and no source",
+			profile:  &profile.Profile{Kind: profile.KindChat},
+			wantKind: profile.KindChat,
+		},
+		{
+			name:       "system run carries both labels",
+			profile:    &profile.Profile{Kind: profile.KindSystem, SystemSource: "nightly_report"},
+			wantKind:   profile.KindSystem,
+			wantSource: "nightly_report",
+		},
+		{
+			name:    "a profile built without a kind is reported as is",
+			profile: &profile.Profile{},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tc.profile != nil {
+				ctx = profile.WithProfile(ctx, tc.profile)
+			}
+			if got := kind(ctx, contextargs.InteractionKind); got != tc.wantKind {
+				t.Errorf("interaction_kind = %q, want %q", got, tc.wantKind)
+			}
+			if got := source(ctx, contextargs.SystemSource); got != tc.wantSource {
+				t.Errorf("system_source = %q, want %q", got, tc.wantSource)
+			}
+		})
 	}
 }

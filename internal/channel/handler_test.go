@@ -49,7 +49,7 @@ func (e *echoRunner) Run(_ context.Context, _ string, content string, _ ...pkg.F
 func baseHandlerConfig() HandlerConfig {
 	return HandlerConfig{
 		ResumeSession: func(_ string) error { return nil },
-		CreateSession: func(_, _, _, _ string) {},
+		CreateSession: func(state.SessionParams) {},
 		Runner:        &echoRunner{},
 		RunAction: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
 			return "", errors.New("no actions")
@@ -174,7 +174,7 @@ func TestHandler_StampsGroupIDFromProfile(t *testing.T) {
 	cfg := baseHandlerConfig()
 	cfg.Runner = runner
 	cfg.Verifier = &stubVerifier{p: &profile.Profile{EntityID: "u1", Group: "g1"}}
-	cfg.CreateSession = func(_, _, group, _ string) { createdGroup = group }
+	cfg.CreateSession = func(p state.SessionParams) { createdGroup = p.GroupID }
 	h := NewMessageHandler(cfg)
 
 	out := callHandler(h, map[string]string{"profile_token": "tok"})
@@ -186,6 +186,31 @@ func TestHandler_StampsGroupIDFromProfile(t *testing.T) {
 	}
 	if createdGroup != "g1" {
 		t.Errorf("CreateSession group = %q, want g1", createdGroup)
+	}
+}
+
+// TestHandler_StampsKindAndSystemSourceFromProfile pins the other half of the
+// session-labelling wiring: a session minted on this connection carries the
+// verified profile's interaction kind AND its per-feature label, so a backend
+// feature's own conversation is attributable and can be kept out of the
+// customer's chat list. Without this the store would faithfully write an empty
+// label forever and every store-level test would still pass.
+func TestHandler_StampsKindAndSystemSourceFromProfile(t *testing.T) {
+	var createdKind, createdSource string
+	cfg := baseHandlerConfig()
+	cfg.Verifier = &stubVerifier{p: &profile.Profile{
+		EntityID: "u1", Kind: profile.KindSystem, SystemSource: "csv_mapping",
+	}}
+	cfg.CreateSession = func(p state.SessionParams) { createdKind, createdSource = p.Kind, p.SystemSource }
+	h := NewMessageHandler(cfg)
+
+	callHandler(h, map[string]string{"profile_token": "tok"})
+
+	if createdKind != profile.KindSystem {
+		t.Errorf("CreateSession kind = %q, want %q", createdKind, profile.KindSystem)
+	}
+	if createdSource != "csv_mapping" {
+		t.Errorf("CreateSession systemSource = %q, want csv_mapping", createdSource)
 	}
 }
 
@@ -348,8 +373,8 @@ func (r *sessionRecorder) resumeFunc() pkg.ResumeSessionFunc {
 }
 
 func (r *sessionRecorder) createFunc() pkg.CreateSessionFunc {
-	return func(key, _, _, _ string) {
-		r.creates = append(r.creates, key)
+	return func(p state.SessionParams) {
+		r.creates = append(r.creates, p.ID)
 	}
 }
 
@@ -626,7 +651,7 @@ func TestHandler_NewMessageHandler_PanicsOnNilResumeSession(t *testing.T) {
 	}()
 	NewMessageHandler(HandlerConfig{
 		ResumeSession: nil,
-		CreateSession: func(_, _, _, _ string) {},
+		CreateSession: func(state.SessionParams) {},
 		Runner:        &echoRunner{},
 	})
 }
@@ -652,7 +677,7 @@ func TestHandler_NewMessageHandler_PanicsOnNilRunner(t *testing.T) {
 	}()
 	NewMessageHandler(HandlerConfig{
 		ResumeSession: func(_ string) error { return nil },
-		CreateSession: func(_, _, _, _ string) {},
+		CreateSession: func(state.SessionParams) {},
 		Runner:        nil,
 	})
 }

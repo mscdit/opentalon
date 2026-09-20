@@ -11,6 +11,9 @@ import (
 type stubSessionStore struct {
 	sessions map[string]*state.Session
 	getCalls int
+	// labels Create was told per id, so the cached wrapper's forwarding of
+	// the write-once session labels is observable.
+	created map[string][2]string
 }
 
 func newStubSessionStore() *stubSessionStore {
@@ -30,9 +33,13 @@ func (s *stubSessionStore) Get(id string) (*state.Session, error) {
 	return &cp, nil
 }
 
-func (s *stubSessionStore) Create(id, entityID, groupID, kind string) *state.Session {
-	sess := &state.Session{ID: id, Messages: []provider.Message{}}
-	s.sessions[id] = sess
+func (s *stubSessionStore) Create(p state.SessionParams) *state.Session {
+	sess := &state.Session{ID: p.ID, Messages: []provider.Message{}}
+	s.sessions[p.ID] = sess
+	if s.created == nil {
+		s.created = map[string][2]string{}
+	}
+	s.created[p.ID] = [2]string{p.Kind, p.SystemSource}
 	return sess
 }
 
@@ -114,7 +121,7 @@ func (e *sessionNotFoundError) Error() string { return "session not found: " + e
 
 func TestCachedSessionStore_GetCachesOnHit(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create(state.SessionParams{ID: "s1"})
 	cached := newCachedSessionStore(stub)
 
 	// First Get should hit the inner store.
@@ -144,7 +151,7 @@ func TestCachedSessionStore_GetCachesOnHit(t *testing.T) {
 
 func TestCachedSessionStore_AddMessageUpdatesCache(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create(state.SessionParams{ID: "s1"})
 	cached := newCachedSessionStore(stub)
 
 	// Populate cache.
@@ -174,7 +181,7 @@ func TestCachedSessionStore_AddMessageUpdatesCache(t *testing.T) {
 
 func TestCachedSessionStore_SetSummaryInvalidatesCache(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create(state.SessionParams{ID: "s1"})
 	cached := newCachedSessionStore(stub)
 
 	// Populate cache.
@@ -203,7 +210,7 @@ func TestCachedSessionStore_SetSummaryInvalidatesCache(t *testing.T) {
 
 func TestCachedSessionStore_DeleteRemovesFromCache(t *testing.T) {
 	stub := newStubSessionStore()
-	stub.Create("s1", "", "", "")
+	stub.Create(state.SessionParams{ID: "s1"})
 	cached := newCachedSessionStore(stub)
 
 	if _, err := cached.Get("s1"); err != nil {
@@ -232,7 +239,7 @@ func TestCachedStore_PromptTypeReachesCache(t *testing.T) {
 	// Create on the INNER store and pull via Get — the cache then holds its own
 	// copy (the stub, like the in-memory store, appends to the same object it
 	// hands out, so caching Create's return value would double-append here).
-	inner.Create("s1", "e", "g", "chat")
+	inner.Create(state.SessionParams{ID: "s1", EntityID: "e", GroupID: "g", Kind: "chat"})
 	if _, err := c.Get("s1"); err != nil {
 		t.Fatalf("prime cache: %v", err)
 	}
@@ -265,5 +272,19 @@ func TestCachedStore_PromptTypeReachesCache(t *testing.T) {
 	}
 	if got := stripApprovedConfirmationExchanges(sess.Messages); len(got) != 0 {
 		t.Fatalf("resolved exchange must strip from cached history, %d rows survived", len(got))
+	}
+}
+
+// The cache wraps Create without looking at the labels; it must still hand
+// both to the inner store, or a system session minted through the cache
+// would land as an unlabelled chat.
+func TestCachedSessionStore_CreateForwardsLabels(t *testing.T) {
+	stub := newStubSessionStore()
+	cached := newCachedSessionStore(stub)
+
+	cached.Create(state.SessionParams{ID: "s-sys", EntityID: "e1", GroupID: "g1", Kind: "system", SystemSource: "csv_mapping"})
+
+	if got := stub.created["s-sys"]; got != [2]string{"system", "csv_mapping"} {
+		t.Errorf("inner Create got (kind, source) = %v, want (system, csv_mapping)", got)
 	}
 }

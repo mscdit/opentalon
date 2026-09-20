@@ -250,7 +250,9 @@ type MemoryStoreInterface interface {
 // SessionStoreInterface is the session store (in-memory or SQLite).
 type SessionStoreInterface interface {
 	Get(id string) (*state.Session, error)
-	Create(id, entityID, groupID, kind string) *state.Session
+	// Create mints a session row from p (see state.SessionParams).
+	// Idempotent: an existing id keeps the labels it was created with.
+	Create(p state.SessionParams) *state.Session
 	AddMessage(id string, msg provider.Message) error
 	// AddMessageWithMetadata is AddMessage plus a small JSON map persisted on
 	// the message row and surfaced only by the transcript reader (never fed to
@@ -561,9 +563,10 @@ func resolveAllowedToolFQNs(ctx context.Context, o *Orchestrator) string {
 }
 
 // defaultContextArgProviders returns built-in providers for orchestrator-managed
-// arguments: opaque identifiers (session_id, conversation_id) and per-session
-// allowlists derived from the profile (allowed_plugins, allowed_tools). No session
-// messages, conversation text, or other sensitive user content is exposed via this
+// arguments: opaque identifiers (session_id, conversation_id), per-session
+// allowlists derived from the profile (allowed_plugins, allowed_tools), and the
+// run's own labels (interaction_kind, system_source). No session messages,
+// conversation text, or other sensitive user content is exposed via this
 // mechanism.
 func defaultContextArgProviders(o *Orchestrator, custom map[string]ContextArgProvider) map[string]ContextArgProvider {
 	builtin := map[string]ContextArgProvider{
@@ -573,7 +576,7 @@ func defaultContextArgProviders(o *Orchestrator, custom map[string]ContextArgPro
 		// injected args a plugin opts into via InjectContextArgs. Empty
 		// when the actor has no group/identity (e.g. profile-less dev);
 		// the consuming plugin fails closed on empty — the host never
-		// invents a scope. The injection loop skips empty values anyway.
+		// invents a scope; the injection loop then removes the key.
 		contextargs.GroupID:  func(ctx context.Context, _ string) string { return actor.GroupID(ctx) },
 		contextargs.EntityID: func(ctx context.Context, _ string) string { return actor.Actor(ctx) },
 		contextargs.AllowedPlugins: func(ctx context.Context, _ string) string {
@@ -581,6 +584,26 @@ func defaultContextArgProviders(o *Orchestrator, custom map[string]ContextArgPro
 		},
 		contextargs.AllowedTools: func(ctx context.Context, _ string) string {
 			return resolveAllowedToolFQNs(ctx, o)
+		},
+		// The run's own labels, straight off the verified profile: what kind
+		// of run this is ("chat" | "system") and, for a system run, which
+		// backend feature opened it. A downstream service that gives one named
+		// run a narrower capability set than an interactive turn needs them on
+		// the request, not just in the host's own attribution records. Both
+		// resolve to "" when no profile is on the run (a dispatcher-run
+		// action, a profile-less dev setup); the injection loop then leaves
+		// the arg out rather than guessing.
+		contextargs.InteractionKind: func(ctx context.Context, _ string) string {
+			if p := profile.FromContext(ctx); p != nil {
+				return p.Kind
+			}
+			return ""
+		},
+		contextargs.SystemSource: func(ctx context.Context, _ string) string {
+			if p := profile.FromContext(ctx); p != nil {
+				return p.SystemSource
+			}
+			return ""
 		},
 	}
 	if len(custom) == 0 {
@@ -4649,18 +4672,28 @@ func (o *Orchestrator) executeCall(ctx context.Context, call ToolCall) ToolResul
 		}
 	}
 	if action != nil {
-		// Inject only declared context arg names that have a provider (e.g. session_id). Plugins never receive session content or message history.
+		// Inject only declared context arg names that have a provider (e.g.
+		// session_id). Plugins never receive session content or message
+		// history. A declared name is host-owned: the provider's value
+		// replaces whatever the caller sent, and when the provider has
+		// nothing (no session, no profile) the key is removed — a
+		// caller-supplied value never stands in for a scope or label the host
+		// did not resolve.
 		if len(action.InjectContextArgs) > 0 {
 			args := make(map[string]string)
 			for k, v := range call.Args {
 				args[k] = v
 			}
 			for _, name := range action.InjectContextArgs {
+				v := ""
 				if provide := o.contextArgProviders[name]; provide != nil {
-					if v := provide(ctx, name); v != "" {
-						args[name] = v
-					}
+					v = provide(ctx, name)
 				}
+				if v == "" {
+					delete(args, name)
+					continue
+				}
+				args[name] = v
 			}
 			call.Args = args
 		}

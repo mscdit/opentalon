@@ -88,6 +88,10 @@ func NewMessageHandler(cfg HandlerConfig) pkg.MessageHandler {
 		// interaction_kind for a session minted on this connection; a verified
 		// profile may override it below (a system invocation sets "system").
 		interactionKind := profile.KindChat
+		// Per-feature label of the backend feature opening this session; a
+		// verified profile carries it for a system invocation, and it stays
+		// empty (stored as NULL) for a human chat.
+		systemSource := ""
 
 		// Profile verification: required when verifier is configured.
 		if cfg.Verifier != nil {
@@ -140,6 +144,7 @@ func NewMessageHandler(cfg HandlerConfig) pkg.MessageHandler {
 			entityID = p.EntityID
 			groupID = p.Group
 			interactionKind = p.Kind
+			systemSource = p.SystemSource
 			sessionKey = p.EntityID + ":" + sessionKey
 			// Use entity ID as actor for memory scoping and permission checks.
 			ctx = actor.WithActor(ctx, p.EntityID)
@@ -213,7 +218,10 @@ func NewMessageHandler(cfg HandlerConfig) pkg.MessageHandler {
 				return errorFrame(msg, "Something went wrong loading your conversation. Please try again.", "internal_error"), nil
 			}
 		} else {
-			cfg.CreateSession(sessionKey, entityID, groupID, interactionKind)
+			cfg.CreateSession(state.SessionParams{
+				ID: sessionKey, EntityID: entityID, GroupID: groupID,
+				Kind: interactionKind, SystemSource: systemSource,
+			})
 		}
 
 		// Resume handshake: a reconnecting client sends one control frame right

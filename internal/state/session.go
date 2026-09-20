@@ -44,29 +44,43 @@ func NewSessionStore(dir string) *SessionStore {
 	}
 }
 
-// Create returns the session for id, minting a fresh empty record if absent.
+// SessionParams is what a session store's Create needs to mint a row. ID is
+// the packed session key; EntityID and GroupID scope it to an actor. Kind is
+// the session's interaction_kind ("chat" | "system"; empty is stored as
+// "chat") and SystemSource the per-feature label of the feature that opened a
+// system session (empty is stored as NULL). Named fields on purpose: two
+// labels of the same type can no longer be swapped and still compile.
+type SessionParams struct {
+	ID           string
+	EntityID     string
+	GroupID      string
+	Kind         string
+	SystemSource string
+}
+
+// Create returns the session for p.ID, minting a fresh empty record if absent.
 // Idempotent on existing ids so a "fresh-intent" call from a reconnecting
 // channel can never wipe a live session's messages — matches the DB-backed
 // store's on-conflict behaviour (see store/session.go Create) and removes
 // a silent-data-loss footgun that surfaced when channels routed a stale
 // conversation_id into the create path instead of the load path.
-func (s *SessionStore) Create(id, _, _, _ string) *Session {
+func (s *SessionStore) Create(p SessionParams) *Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if existing, ok := s.sessions[id]; ok {
+	if existing, ok := s.sessions[p.ID]; ok {
 		return existing
 	}
 
 	now := time.Now()
 	sess := &Session{
-		ID:        id,
+		ID:        p.ID,
 		Messages:  make([]provider.Message, 0),
 		Metadata:  make(map[string]string),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	s.sessions[id] = sess
+	s.sessions[p.ID] = sess
 	return sess
 }
 

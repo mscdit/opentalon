@@ -36,9 +36,9 @@ func (c *cachedSessionStore) Get(id string) (*state.Session, error) {
 	return &cp, nil
 }
 
-func (c *cachedSessionStore) Create(id, entityID, groupID, kind string) *state.Session {
-	s := c.inner.Create(id, entityID, groupID, kind)
-	c.cache[id] = s
+func (c *cachedSessionStore) Create(p state.SessionParams) *state.Session {
+	s := c.inner.Create(p)
+	c.cache[p.ID] = s
 	return s
 }
 

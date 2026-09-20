@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/opentalon/opentalon/internal/provider"
@@ -97,20 +98,38 @@ func (s *SessionStore) Get(id string) (*state.Session, error) {
 }
 
 // Create inserts a new session. If id already exists (e.g. race), returns existing session from DB.
-func (s *SessionStore) Create(id, entityID, groupID, kind string) *state.Session {
+//
+// p.Kind is the session's interaction_kind ("chat" | "system"); an empty kind is
+// stored as "chat". p.SystemSource is the per-feature label of the in-app feature
+// that opened the session (migration 016); empty is stored as NULL, which is
+// what an ordinary human chat leaves behind.
+//
+// Both labels are written here and nowhere else: an id that already exists
+// keeps the labels it was created with, because the INSERT conflicts and the
+// existing row is returned untouched. That is what makes a chat session which
+// later receives an injected system turn keep its NULL source while that turn's
+// own usage row carries the feature label.
+func (s *SessionStore) Create(p state.SessionParams) *state.Session {
 	now := time.Now().UTC().Format(time.RFC3339)
+	kind := p.Kind
 	if kind == "" {
 		kind = "chat"
 	}
+	source := sql.NullString{String: p.SystemSource, Valid: p.SystemSource != ""}
 	_, err := s.db.SQLDB().Exec(
-		s.db.Dialect().Rebind(`INSERT INTO sessions (id, summary, active_model, metadata, entity_id, group_id, interaction_kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		id, "", "", "{}", entityID, groupID, kind, now, now)
+		s.db.Dialect().Rebind(`INSERT INTO sessions (id, summary, active_model, metadata, entity_id, group_id, interaction_kind, system_source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		p.ID, "", "", "{}", p.EntityID, p.GroupID, kind, source, now, now)
 	if err != nil {
-		if existing, e := s.Get(id); e == nil {
+		if existing, e := s.Get(p.ID); e == nil {
 			return existing
 		}
+		// Not the id race this path exists for: nothing was written and the
+		// caller cannot tell. Say so, or the first symptom is a message write
+		// failing later against a row that never existed.
+		slog.Warn("session insert failed with no existing row; continuing with a transient session",
+			"id", p.ID, "error", err)
 		return &state.Session{
-			ID:        id,
+			ID:        p.ID,
 			Messages:  []provider.Message{},
 			Metadata:  map[string]string{},
 			CreatedAt: time.Now(),
@@ -118,12 +137,34 @@ func (s *SessionStore) Create(id, entityID, groupID, kind string) *state.Session
 		}
 	}
 	return &state.Session{
-		ID:        id,
+		ID:        p.ID,
 		Messages:  []provider.Message{},
 		Metadata:  map[string]string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
+}
+
+// sessionRowLocker is the slice of a transaction lockSessionRow needs; both
+// *sql.Tx and the dialect's ExclusiveTx satisfy it.
+type sessionRowLocker interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// lockSessionRow serialises every writer of one session's transcript behind
+// its sessions row. It is the FIRST statement of each such transaction, so
+// they all take locks in the same order (sessions row, then messages rows)
+// and can never wait on each other in a cycle. On Postgres it is FOR UPDATE;
+// on SQLite the suffix is empty and BEGIN IMMEDIATE already serialises
+// writers. A session with no row (nothing to lock) is not an error: the
+// caller then keeps its single-statement behaviour.
+func lockSessionRow(ctx context.Context, tx sessionRowLocker, d Dialect, id string) error {
+	var one int
+	err := tx.QueryRowContext(ctx, d.Rebind(`SELECT 1 FROM sessions WHERE id = ?`+d.ForUpdate()), id).Scan(&one)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return nil
 }
 
 // AddMessage inserts a message into the messages table and updates the session timestamp.
@@ -156,14 +197,22 @@ func (s *SessionStore) AddMessageWithMetadata(id string, msg provider.Message, m
 		return err
 	}
 
-	tx, err := s.db.SQLDB().BeginTx(ctx, nil)
+	tx, cleanup, err := d.BeginExclusive(ctx, s.db.SQLDB())
 	if err != nil {
 		return fmt.Errorf("add message begin: %w", err)
 	}
+	defer cleanup()
 	defer func() { _ = tx.Rollback() }()
 
-	// Atomically assign next seq in a single statement to avoid race conditions
-	// between concurrent AddMessage calls.
+	// Serialise the writers of one session before the seq is assigned. The
+	// INSERT below computes MAX(seq)+1 in a single statement, which is atomic
+	// on SQLite but not on Postgres: two read-committed transactions both
+	// read the same MAX and the second INSERT hits idx_messages_session_seq.
+	// The row lock makes the second writer wait and recompute.
+	if err := lockSessionRow(ctx, tx, d, id); err != nil {
+		return fmt.Errorf("add message lock: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		d.Rebind(`INSERT INTO messages (session_id, seq, role, content, tool_calls, tool_call_id, metadata, visibility, created_at)
 		SELECT ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, ?, ?, ? FROM messages WHERE session_id = ?`),
@@ -269,11 +318,21 @@ func (s *SessionStore) SetSummary(id string, summary string, messages []provider
 	d := s.db.Dialect()
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	tx, err := s.db.SQLDB().BeginTx(ctx, nil)
+	tx, cleanup, err := d.BeginExclusive(ctx, s.db.SQLDB())
 	if err != nil {
 		return fmt.Errorf("set summary begin: %w", err)
 	}
+	defer cleanup()
 	defer func() { _ = tx.Rollback() }()
+
+	// Same lock order as AddMessage (sessions row first): this transaction
+	// also touches messages and then the sessions row, and taking them the
+	// other way round deadlocks against a concurrent AddMessage that trims
+	// old rows. The lock also keeps the fresh seq numbering below from
+	// colliding with a message appended in between.
+	if err := lockSessionRow(ctx, tx, d, id); err != nil {
+		return fmt.Errorf("set summary lock: %w", err)
+	}
 
 	// Delete all existing messages for this session.
 	if _, err := tx.ExecContext(ctx,
@@ -336,11 +395,17 @@ func (s *SessionStore) ClearMessages(id string) error {
 	d := s.db.Dialect()
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	tx, err := s.db.SQLDB().BeginTx(ctx, nil)
+	tx, cleanup, err := d.BeginExclusive(ctx, s.db.SQLDB())
 	if err != nil {
 		return fmt.Errorf("clear messages begin: %w", err)
 	}
+	defer cleanup()
 	defer func() { _ = tx.Rollback() }()
+
+	// Sessions row first — the one lock order every transcript writer uses.
+	if err := lockSessionRow(ctx, tx, d, id); err != nil {
+		return fmt.Errorf("clear messages lock: %w", err)
+	}
 
 	if _, err := tx.ExecContext(ctx,
 		d.Rebind(`DELETE FROM messages WHERE session_id = ?`), id); err != nil {

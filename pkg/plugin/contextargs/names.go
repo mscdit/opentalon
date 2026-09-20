@@ -10,6 +10,15 @@
 // a matching provider in the host's defaultContextArgProviders. Plugins
 // then opt in by listing the name in InjectContextArgs on each action
 // that needs it.
+//
+// A DECLARED inject name is host-owned on every call to that action: the
+// host's value replaces a caller-supplied one, and when the host resolves
+// nothing the key is removed. An action that does not declare a name gets
+// whatever the caller put under it, as an ordinary untrusted argument. A
+// plugin therefore must not declare one of these names as a tool Parameter
+// — the model's value could never reach it — and a scheduled job cannot
+// supply one through its stored args: the host resolves them from the run's
+// context or not at all.
 package contextargs
 
 // SessionID is the opaque session identifier carried in the request
@@ -58,6 +67,25 @@ const GroupID = "group_id"
 // empty string outside any actor context. Used to record who authored a
 // resource; distinct from GroupID, which scopes access.
 const EntityID = "entity_id"
+
+// InteractionKind is the kind of run the current turn belongs to, as
+// resolved by the profile verifier (Profile.Kind): "chat" for a
+// human-driven turn, "system" for a backend-originated one. A verified
+// profile always carries one of the two. Absent (the host injects nothing)
+// when no profile is on the run: a dispatcher-run action, or a profile-less
+// local dev setup. A nested RunAction callback inherits the labels of the
+// verified turn it runs inside. A consumer that gates on the kind MUST treat
+// an absent value as "unlabelled" and fall back to whatever it did before
+// labels existed.
+const InteractionKind = "interaction_kind"
+
+// SystemSource is the per-feature label a system run carries
+// (Profile.SystemSource) — the name of the backend feature that opened
+// the run, as the WhoAmI server reported it. Absent for a chat turn and
+// whenever no profile is on the run. A downstream service may use it to
+// give one named run a narrower capability set than an interactive turn;
+// the host only reports the label and enforces nothing itself.
+const SystemSource = "system_source"
 
 // Callback identity carriers. A plugin that fires a host RunAction callback
 // for a background/system action (e.g. the agents plugin running a

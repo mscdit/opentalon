@@ -60,7 +60,7 @@ func TestSubprocessBasicFork(t *testing.T) {
 	}}
 
 	orch := setupSubprocessOrchestrator(llm)
-	sess := orch.sessions.Create("test-basic", "", "", "")
+	sess := orch.sessions.Create(state.SessionParams{ID: "test-basic"})
 
 	result, err := orch.Run(context.Background(), sess.ID, "What is the capital of France?")
 	if err != nil {
@@ -130,7 +130,7 @@ func TestSubprocessWithToolCalls(t *testing.T) {
 	}}
 
 	orch := setupSubprocessOrchestrator(llm)
-	sess := orch.sessions.Create("test-tools", "", "", "")
+	sess := orch.sessions.Create(state.SessionParams{ID: "test-tools"})
 
 	result, err := orch.Run(context.Background(), sess.ID, "What is our refund policy?")
 	if err != nil {

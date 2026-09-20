@@ -113,7 +113,7 @@ func setupOrchestratorWithSink(llm LLMClient, parser ToolCallParser, sink emit.S
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create(state.SessionParams{ID: "test-session"})
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 	return orch, "test-session"
@@ -140,7 +140,7 @@ func setupOrchestratorWithSinkNative(llm LLMClient, parser ToolCallParser, sink 
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create(state.SessionParams{ID: "test-session"})
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 	return orch, "test-session"
@@ -164,7 +164,7 @@ func setupOrchestratorWithSinkAndStore(llm LLMClient, parser ToolCallParser, sin
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create(state.SessionParams{ID: "test-session"})
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:           sink,
@@ -421,7 +421,7 @@ func TestOrchestrator_TurnStart_ServerInstructionsSortedByName(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 
 	sink := &recordingEventSink{}
 	llm := &fakeLLM{responses: []string{"ok"}}
@@ -865,7 +865,7 @@ func TestOrchestrator_ExecuteCall_ResultStatus_ErrorOnDispatchError(t *testing.T
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 
@@ -906,7 +906,7 @@ func TestOrchestrator_ExecuteCall_PassesStructuredContent(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 
@@ -955,7 +955,7 @@ func TestOrchestrator_ExecuteCall_ErrorClearsStructured(t *testing.T) {
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 
@@ -1057,7 +1057,7 @@ func TestOrchestrator_ExecuteCall_EmitsArgsInvalid_OnRejectUnknownArgs(t *testin
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 
@@ -1136,7 +1136,7 @@ func TestOrchestrator_ExecuteCall_RawCapture_ExtractedHasOriginalActionBeforeNor
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 
@@ -1191,7 +1191,7 @@ func TestOrchestrator_ExecuteCall_EmitsResultError_OnUserOnlyRefusal(t *testing.
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 
@@ -1235,7 +1235,7 @@ func TestOrchestrator_ExecuteCall_EmitsResultError_OnRestrictedPluginRefusal(t *
 
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{EventSink: sink})
 
@@ -1442,7 +1442,7 @@ func TestOrchestrator_ParseFailed_NoEventSink_DoesNotPanic(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	llm := &fakeLLM{responses: []string{
 		"[tool_call] garbage [/tool_call]",
 		"final",
@@ -1461,7 +1461,7 @@ func TestOrchestrator_ExecuteCall_NoEventSink_DoesNotPanic(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{parseFn: func(string) []ToolCall { return nil }},
 		registry, memory, sessions, OrchestratorOpts{}) // no EventSink
 
@@ -1499,7 +1499,7 @@ func setupOrchestratorWithPlanner(llm LLMClient, parser ToolCallParser, sink emi
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:       sink,
 		PipelineEnabled: true,
@@ -1649,7 +1649,7 @@ func TestOrchestrator_Summarization_EmitsTriggeredAndCompleted(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	for i := 0; i < 10; i++ {
 		_ = sessions.AddMessage("sess", provider.Message{
 			Role: provider.RoleUser, Content: "msg " + strconv.Itoa(i),
@@ -1701,7 +1701,7 @@ func TestOrchestrator_Summarization_NoCompletedOnLLMError(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	for i := 0; i < 10; i++ {
 		_ = sessions.AddMessage("sess", provider.Message{
 			Role: provider.RoleUser, Content: "msg",
@@ -1729,7 +1729,7 @@ func TestOrchestrator_Summarization_BelowThreshold_NoEvents(t *testing.T) {
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	// Only 2 messages; threshold is 5 → maybeSummarizeSession returns early.
 	for i := 0; i < 2; i++ {
 		_ = sessions.AddMessage("sess", provider.Message{Role: provider.RoleUser, Content: "m"})
@@ -2071,7 +2071,7 @@ func TestOrchestrator_Confirmation_ToolCallRequiresConfirmation_EmitsRequested(t
 	}, confirmingExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:          sink,
@@ -2136,7 +2136,7 @@ func TestOrchestrator_Confirmation_ReadOnlyAction_SkipsPrompt(t *testing.T) {
 	}, confirmingExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:          sink,
@@ -2192,7 +2192,7 @@ func TestOrchestrator_Confirmation_ReadOnlyAction_MatchesPrefixedManifestName(t 
 	}, confirmingExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:          sink,
@@ -2243,7 +2243,7 @@ func TestOrchestrator_Confirmation_NonReadOnlyAction_StillPrompts(t *testing.T) 
 	}, confirmingExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:          sink,
@@ -2415,7 +2415,7 @@ func TestParentID_ConfirmationResolvedParentsRequested_ToolCall(t *testing.T) {
 	}, confirmingExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:          sink,
 		ConfirmationPlugin: "conf",
@@ -2601,7 +2601,7 @@ func TestOrchestrator_PreparerPhase_EmitsRetrievalAndDecision(t *testing.T) {
 	}, &fixedResultExecutor{content: preparerJSON})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:        sink,
 		ContentPreparers: []ContentPreparerEntry{{Plugin: "rag-plugin", Action: "prepare"}},
@@ -2777,7 +2777,7 @@ func TestOrchestrator_PreparerPhase_LegacyPluginNoCandidates(t *testing.T) {
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:        sink,
 		ContentPreparers: []ContentPreparerEntry{{Plugin: "legacy-plugin", Action: "prepare"}},
@@ -2848,7 +2848,7 @@ func TestOrchestrator_PreparerPhase_MultiPreparerAggregation(t *testing.T) {
 	}, &fixedResultExecutor{content: prepB})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink: sink,
 		ContentPreparers: []ContentPreparerEntry{
@@ -2909,7 +2909,7 @@ func TestOrchestrator_MessagesTruncated_EmittedWhenSlidingWindowCuts(t *testing.
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 
 	// Seed sess.Messages with 6 user/assistant pairs (12 messages) so the
 	// cutter has work to do. ContextMessages = 4 → expect 8 dropped.
@@ -2955,7 +2955,7 @@ func TestOrchestrator_MessagesTruncated_NotEmittedWhenWithinWindow(t *testing.T)
 	registry := NewToolRegistry()
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	// Only one prior exchange — well below the window.
 	_ = sessions.AddMessage("s1", provider.Message{Role: provider.RoleUser, Content: "u"})
 	_ = sessions.AddMessage("s1", provider.Message{Role: provider.RoleAssistant, Content: "a"})
@@ -3009,7 +3009,7 @@ func newCatalogOrch(t *testing.T, store *fakeInjectionStateStore) *Orchestrator 
 	registerTierTestPlugins(t, registry, `{"send_to_llm": true, "message": "q"}`)
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	return NewWithRules(nativeToolsLLM{&fakeLLM{}}, &fakeParser{}, registry, memory, sessions, OrchestratorOpts{
 		ContentPreparers:    []ContentPreparerEntry{{Plugin: "rag-plugin", Action: "prepare"}},
 		InjectionStateStore: store,
@@ -3092,7 +3092,7 @@ func TestToolCatalog_StickyCapKeepsMostRecentlyUsed(t *testing.T) {
 	registerTierTestPlugins(t, registry, `{"send_to_llm": true, "message": "q"}`)
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 
 	// Seed more than the cap; the lowest ranks must be dropped.
 	known := make([]state.KnownToolEntry, 0, maxStickyTools+5)
@@ -3130,7 +3130,7 @@ func TestToolCatalog_DemotedToolNotSticky(t *testing.T) {
 	registerTierTestPlugins(t, registry, `{"send_to_llm": true, "message": "q"}`)
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	store := &fakeInjectionStateStore{store: map[string]state.InjectionState{
 		"s1": {KnownTools: []state.KnownToolEntry{
 			{ToolName: "tools-plugin__t1", LRURank: 99, Demoted: true},
@@ -3165,7 +3165,7 @@ func setupClassifierOrchestrator(llm LLMClient, parser ToolCallParser, sink emit
 	}, &echoExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("test-session", "", "", "")
+	sessions.Create(state.SessionParams{ID: "test-session"})
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:                     sink,
 		ConfirmationClassifierEnabled: true,
@@ -3281,7 +3281,7 @@ func TestSingleStepPipeline_PrivilegedWrite_RequiresConfirmation(t *testing.T) {
 	_ = registry.Register(PluginCapability{Name: "conf", Actions: []Action{{Name: "check"}}}, confirmingExecutor{})
 	memory := state.NewMemoryStore("")
 	sessions := state.NewSessionStore("")
-	sessions.Create("sess", "", "", "")
+	sessions.Create(state.SessionParams{ID: "sess"})
 	orch := NewWithRules(llm, parser, registry, memory, sessions, OrchestratorOpts{
 		EventSink:          sink,
 		PipelineEnabled:    true,
