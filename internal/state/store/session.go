@@ -145,6 +145,28 @@ func (s *SessionStore) Create(p state.SessionParams) *state.Session {
 	}
 }
 
+// sessionRowLocker is the slice of a transaction lockSessionRow needs; both
+// *sql.Tx and the dialect's ExclusiveTx satisfy it.
+type sessionRowLocker interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// lockSessionRow serialises every writer of one session's transcript behind
+// its sessions row. It is the FIRST statement of each such transaction, so
+// they all take locks in the same order (sessions row, then messages rows)
+// and can never wait on each other in a cycle. On Postgres it is FOR UPDATE;
+// on SQLite the suffix is empty and BEGIN IMMEDIATE already serialises
+// writers. A session with no row (nothing to lock) is not an error: the
+// caller then keeps its single-statement behaviour.
+func lockSessionRow(ctx context.Context, tx sessionRowLocker, d Dialect, id string) error {
+	var one int
+	err := tx.QueryRowContext(ctx, d.Rebind(`SELECT 1 FROM sessions WHERE id = ?`+d.ForUpdate()), id).Scan(&one)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return nil
+}
+
 // AddMessage inserts a message into the messages table and updates the session timestamp.
 // All statements run in a single transaction to reduce network roundtrips to PostgreSQL.
 func (s *SessionStore) AddMessage(id string, msg provider.Message) error {
@@ -184,15 +206,10 @@ func (s *SessionStore) AddMessageWithMetadata(id string, msg provider.Message, m
 
 	// Serialise the writers of one session before the seq is assigned. The
 	// INSERT below computes MAX(seq)+1 in a single statement, which is atomic
-	// on SQLite (BEGIN IMMEDIATE already holds the write lock) but not on
-	// Postgres: two read-committed transactions both read the same MAX and
-	// the second INSERT hits idx_messages_session_seq. Locking the session
-	// row makes the second writer wait and recompute. A session with no row
-	// (nothing to lock) keeps the old single-statement behaviour.
-	var one int
-	if err := tx.QueryRowContext(ctx,
-		d.Rebind(`SELECT 1 FROM sessions WHERE id = ?`+d.ForUpdate()), id,
-	).Scan(&one); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	// on SQLite but not on Postgres: two read-committed transactions both
+	// read the same MAX and the second INSERT hits idx_messages_session_seq.
+	// The row lock makes the second writer wait and recompute.
+	if err := lockSessionRow(ctx, tx, d, id); err != nil {
 		return fmt.Errorf("add message lock: %w", err)
 	}
 
@@ -301,11 +318,21 @@ func (s *SessionStore) SetSummary(id string, summary string, messages []provider
 	d := s.db.Dialect()
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	tx, err := s.db.SQLDB().BeginTx(ctx, nil)
+	tx, cleanup, err := d.BeginExclusive(ctx, s.db.SQLDB())
 	if err != nil {
 		return fmt.Errorf("set summary begin: %w", err)
 	}
+	defer cleanup()
 	defer func() { _ = tx.Rollback() }()
+
+	// Same lock order as AddMessage (sessions row first): this transaction
+	// also touches messages and then the sessions row, and taking them the
+	// other way round deadlocks against a concurrent AddMessage that trims
+	// old rows. The lock also keeps the fresh seq numbering below from
+	// colliding with a message appended in between.
+	if err := lockSessionRow(ctx, tx, d, id); err != nil {
+		return fmt.Errorf("set summary lock: %w", err)
+	}
 
 	// Delete all existing messages for this session.
 	if _, err := tx.ExecContext(ctx,
@@ -368,11 +395,17 @@ func (s *SessionStore) ClearMessages(id string) error {
 	d := s.db.Dialect()
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	tx, err := s.db.SQLDB().BeginTx(ctx, nil)
+	tx, cleanup, err := d.BeginExclusive(ctx, s.db.SQLDB())
 	if err != nil {
 		return fmt.Errorf("clear messages begin: %w", err)
 	}
+	defer cleanup()
 	defer func() { _ = tx.Rollback() }()
+
+	// Sessions row first — the one lock order every transcript writer uses.
+	if err := lockSessionRow(ctx, tx, d, id); err != nil {
+		return fmt.Errorf("clear messages lock: %w", err)
+	}
 
 	if _, err := tx.ExecContext(ctx,
 		d.Rebind(`DELETE FROM messages WHERE session_id = ?`), id); err != nil {

@@ -236,3 +236,40 @@ func TestPostgres_SessionSystemSourceRoundTrip(t *testing.T) {
 		t.Errorf("indexdef = %q, want a partial index (WHERE system_source IS NOT NULL)", indexdef)
 	}
 }
+
+// Every transcript writer takes the sessions row before any messages row.
+// With the cap on, AddMessage also deletes old rows, so an AddMessage racing
+// a SetSummary (which deletes and re-inserts the whole transcript) would
+// deadlock on Postgres if the two took their locks in opposite orders:
+// Postgres then aborts one side with "deadlock detected". Hammer both paths
+// on one session and require that no write ever fails.
+func TestPostgres_TranscriptWritersShareOneLockOrder(t *testing.T) {
+	db := pgDB(t)
+	store := NewSessionStore(db, 5, 0) // cap on, so AddMessage trims
+	store.Create(state.SessionParams{ID: "lock-order"})
+
+	const rounds = 40
+	var wg sync.WaitGroup
+	errs := make(chan error, rounds*2)
+	for i := 0; i < rounds; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if err := store.AddMessage("lock-order", provider.Message{Role: provider.RoleUser, Content: "msg"}); err != nil {
+				errs <- err
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			kept := []provider.Message{{Role: provider.RoleAssistant, Content: "summary-kept"}}
+			if err := store.SetSummary("lock-order", "summary", kept); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("transcript write failed: %v", err)
+	}
+}
