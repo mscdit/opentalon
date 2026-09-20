@@ -564,18 +564,6 @@ func resolveAllowedToolFQNs(ctx context.Context, o *Orchestrator) string {
 	return string(b)
 }
 
-// runLabel reads one of the verified profile's run labels off the request
-// context. A nil profile (profile-less dev setup, work outside a verified
-// turn) yields the empty string, which the injection loop then skips — an
-// absent label reaches the plugin as an absent arg, never as a guessed one.
-func runLabel(ctx context.Context, pick func(*profile.Profile) string) string {
-	p := profile.FromContext(ctx)
-	if p == nil {
-		return ""
-	}
-	return pick(p)
-}
-
 // defaultContextArgProviders returns built-in providers for orchestrator-managed
 // arguments: opaque identifiers (session_id, conversation_id), per-session
 // allowlists derived from the profile (allowed_plugins, allowed_tools), and the
@@ -603,14 +591,21 @@ func defaultContextArgProviders(o *Orchestrator, custom map[string]ContextArgPro
 		// of run this is ("chat" | "system") and, for a system run, which
 		// backend feature opened it. A downstream service that gives one named
 		// run a narrower capability set than an interactive turn needs them on
-		// the request, not just in the host's own attribution records. Reported
-		// verbatim — the host neither defaults an empty Kind to "chat" nor
-		// invents a source, so a consumer can tell "unlabelled" from "chat".
+		// the request, not just in the host's own attribution records. Both
+		// resolve to "" when no profile is on the run (a dispatcher-run
+		// action, a profile-less dev setup); the injection loop then leaves
+		// the arg out rather than guessing.
 		contextargs.InteractionKind: func(ctx context.Context, _ string) string {
-			return runLabel(ctx, func(p *profile.Profile) string { return p.Kind })
+			if p := profile.FromContext(ctx); p != nil {
+				return p.Kind
+			}
+			return ""
 		},
 		contextargs.SystemSource: func(ctx context.Context, _ string) string {
-			return runLabel(ctx, func(p *profile.Profile) string { return p.SystemSource })
+			if p := profile.FromContext(ctx); p != nil {
+				return p.SystemSource
+			}
+			return ""
 		},
 	}
 	if len(custom) == 0 {
@@ -4679,18 +4674,28 @@ func (o *Orchestrator) executeCall(ctx context.Context, call ToolCall) ToolResul
 		}
 	}
 	if action != nil {
-		// Inject only declared context arg names that have a provider (e.g. session_id). Plugins never receive session content or message history.
+		// Inject only declared context arg names that have a provider (e.g.
+		// session_id). Plugins never receive session content or message
+		// history. A declared name is host-owned: the provider's value
+		// replaces whatever the caller sent, and when the provider has
+		// nothing (no session, no profile) the key is removed — a
+		// caller-supplied value never stands in for a scope or label the host
+		// did not resolve.
 		if len(action.InjectContextArgs) > 0 {
 			args := make(map[string]string)
 			for k, v := range call.Args {
 				args[k] = v
 			}
 			for _, name := range action.InjectContextArgs {
+				v := ""
 				if provide := o.contextArgProviders[name]; provide != nil {
-					if v := provide(ctx, name); v != "" {
-						args[name] = v
-					}
+					v = provide(ctx, name)
 				}
+				if v == "" {
+					delete(args, name)
+					continue
+				}
+				args[name] = v
 			}
 			call.Args = args
 		}
