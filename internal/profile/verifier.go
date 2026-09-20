@@ -437,17 +437,21 @@ func (v *Verifier) callServer(ctx context.Context, token, channelType string, me
 	model := jsonString(raw[v.cfg.ModelField])
 	channelTypeResp := jsonString(raw[v.cfg.ChannelTypeField])
 	name := jsonString(raw[v.cfg.NameField])
-	systemSource := jsonString(raw[v.cfg.SystemSourceField])
 	kind := jsonString(raw[v.cfg.KindField])
 	if kind == "" {
-		// Absent ⇒ chat, so a legacy WhoAmI server is never misread as a
-		// system run — unless it named a feature: a source is only ever
-		// minted for a system run, and a "chat" carrying one would persist a
-		// feature label on a person's own conversation.
-		kind = KindChat
-		if systemSource != "" {
-			kind = KindSystem
-		}
+		kind = KindChat // absent ⇒ chat; track the constant, not a bare literal
+	}
+	systemSource := jsonString(raw[v.cfg.SystemSourceField])
+	if systemSource != "" && kind != KindSystem {
+		// A source belongs to a system run only. It never upgrades the kind:
+		// "system" skips the interactive spend limit and may carry hidden
+		// turns, so a server that sends a source but no explicit kind must
+		// not gain that by accident. Dropping the orphan source instead keeps
+		// the invariant the store relies on — a chat session carries no
+		// feature label — the same way an escalated turn clears it.
+		slog.WarnContext(ctx, "whoami: system_source on a non-system run ignored",
+			"kind", kind, "system_source", systemSource)
+		systemSource = ""
 	}
 
 	var limit int

@@ -576,7 +576,7 @@ func defaultContextArgProviders(o *Orchestrator, custom map[string]ContextArgPro
 		// injected args a plugin opts into via InjectContextArgs. Empty
 		// when the actor has no group/identity (e.g. profile-less dev);
 		// the consuming plugin fails closed on empty — the host never
-		// invents a scope. The injection loop skips empty values anyway.
+		// invents a scope; the injection loop then removes the key.
 		contextargs.GroupID:  func(ctx context.Context, _ string) string { return actor.GroupID(ctx) },
 		contextargs.EntityID: func(ctx context.Context, _ string) string { return actor.Actor(ctx) },
 		contextargs.AllowedPlugins: func(ctx context.Context, _ string) string {

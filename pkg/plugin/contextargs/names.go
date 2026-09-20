@@ -11,10 +11,14 @@
 // then opt in by listing the name in InjectContextArgs on each action
 // that needs it.
 //
-// An inject name is host-owned on every call: the host's value replaces a
-// caller-supplied one, and when the host resolves nothing the key is
-// removed. A plugin therefore must not declare one of these names as a
-// tool Parameter — the model's value could never reach it.
+// A DECLARED inject name is host-owned on every call to that action: the
+// host's value replaces a caller-supplied one, and when the host resolves
+// nothing the key is removed. An action that does not declare a name gets
+// whatever the caller put under it, as an ordinary untrusted argument. A
+// plugin therefore must not declare one of these names as a tool Parameter
+// — the model's value could never reach it — and a scheduled job cannot
+// supply one through its stored args: the host resolves them from the run's
+// context or not at all.
 package contextargs
 
 // SessionID is the opaque session identifier carried in the request

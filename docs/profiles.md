@@ -82,7 +82,7 @@ Authorization: Bearer <token>
 | `plugins` | No | Plugin IDs allowed for this group. Auto-saved to DB (see [Dynamic plugin assignments](#dynamic-plugin-assignments)). |
 | `model` | No | Model override for this profile (e.g. `"anthropic/claude-3-5-sonnet-20241022"`). Overrides the server default for this request. |
 | `kind` | No | `chat` (default) for a person's turn, `system` for a run a backend feature started on a user's behalf. Stamped on the session row at creation (`sessions.interaction_kind`) and on every usage row. |
-| `system_source` | No | Name of the feature behind a `system` run, e.g. `job_notify`. A response that names a source but omits `kind` is read as `system`. Stamped once on the session that the run opened (`sessions.system_source`, NULL for chat) and on each usage row; see [Run labels](#run-labels). |
+| `system_source` | No | Name of the feature behind a `system` run, e.g. `job_notify`. Only honoured together with `kind: system`; on any other run it is ignored and logged — a source never upgrades a run's kind, because `system` skips the interactive spend limit. Stamped once on the session that the run opened (`sessions.system_source`, NULL for chat) and on each usage row; see [Run labels](#run-labels). |
 
 ### Full WhoAmI config
 

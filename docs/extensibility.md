@@ -113,10 +113,12 @@ Three rules apply to every name:
   profile) is not injected at all — never an empty string or a guessed
   default. A plugin that gates behaviour on a label treats a missing key as
   "unlabelled" and falls back to what it did before the label existed.
-- **The host owns the key.** Its value replaces anything the caller sent under
-  the same name, and when it has nothing the key is removed. Do not declare
-  one of these names as a tool parameter; the model's value could never reach
-  you.
+- **The host owns a declared key.** On an action that lists the name, the
+  host's value replaces anything the caller sent under it, and when the host
+  has nothing the key is removed — a scheduled job's stored args cannot
+  supply one either. An action that does not list the name receives whatever
+  the caller sent, as an ordinary untrusted argument. Do not declare one of
+  these names as a tool parameter; the model's value could never reach you.
 - **Nested callbacks inherit the run.** An action that fires a host
   `RunAction` callback under a different identity (a scheduled workflow
   running as its owner) keeps the labels of the verified turn it runs inside;
