@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/opentalon/opentalon/internal/state"
 )
 
 // InboundMessage is a message from a channel (user → core).
@@ -221,20 +223,21 @@ type ContentPreparer func(ctx context.Context, content string, runAction RunActi
 // SessionStore.Load (the yaml-from-disk method on the in-memory store).
 type ResumeSessionFunc func(sessionKey string) error
 
-// CreateSessionFunc registers (or returns) a session row for sessionKey,
-// entityID, groupID, kind, systemSource. kind is the session's
-// interaction_kind ("chat" | "system"); an empty kind is stored as "chat".
-// systemSource is the per-feature label of the backend feature that opened the
-// session (empty for a human chat, stored as NULL); it says which feature
-// OPENED the conversation, while the per-run label on the usage row says which
-// feature drove each turn — the two differ for a system turn injected into an
-// existing chat. Idempotent: an existing session is returned untouched, never
-// wiped, so both labels are set once at creation and never updated. The
-// handler calls Create on messages NOT flagged with resume_intent — i.e. the
-// channel did not have a client-supplied id and just minted one for this
-// connection. Splitting Resume/Create replaces the previous EnsureSessionFunc
-// which conflated the two paths and silently auto-created on any cache miss.
-type CreateSessionFunc func(sessionKey, entityID, groupID, kind, systemSource string)
+// CreateSessionFunc registers (or returns) a session row for p: the packed
+// session key, the actor scope and the two labels (state.SessionParams). Kind
+// is the session's interaction_kind ("chat" | "system"; empty is stored as
+// "chat"). SystemSource is the per-feature label of the backend feature that
+// opened the session (empty for a human chat, stored as NULL); it says which
+// feature OPENED the conversation, while the per-run label on the usage row
+// says which feature drove each turn — the two differ for a system turn
+// injected into an existing chat. Idempotent: an existing session is returned
+// untouched, never wiped, so both labels are set once at creation and never
+// updated. The handler calls Create on messages NOT flagged with resume_intent
+// — i.e. the channel did not have a client-supplied id and just minted one for
+// this connection. Splitting Resume/Create replaces the previous
+// EnsureSessionFunc which conflated the two paths and silently auto-created on
+// any cache miss.
+type CreateSessionFunc func(p state.SessionParams)
 
 // ResumeIntentMetadataKey is the InboundMessage metadata key channels set
 // to "true" when the conversation_id on the message came from the client

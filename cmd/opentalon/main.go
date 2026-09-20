@@ -1056,8 +1056,8 @@ func main() {
 	// Fresh mint: delegates to the underlying store, which is idempotent
 	// in both the DB-backed (INSERT-on-conflict returns existing row) and
 	// the in-memory variant (Create returns existing pointer when present).
-	createSession := func(sessionKey, entityID, groupID, kind, systemSource string) {
-		sessions.Create(sessionKey, entityID, groupID, kind, systemSource)
+	createSession := func(p state.SessionParams) {
+		sessions.Create(p)
 	}
 	runner := &channelRunner{orch: orch}
 	handler := channel.NewMessageHandler(channel.HandlerConfig{

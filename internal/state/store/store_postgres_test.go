@@ -13,6 +13,7 @@ import (
 
 	"github.com/opentalon/opentalon/internal/config"
 	"github.com/opentalon/opentalon/internal/provider"
+	"github.com/opentalon/opentalon/internal/state"
 	"github.com/opentalon/opentalon/internal/state/store/events"
 )
 
@@ -64,7 +65,7 @@ func TestPostgres_OpenAndMigrations(t *testing.T) {
 func TestPostgres_AddMessageConcurrent(t *testing.T) {
 	db := pgDB(t)
 	store := NewSessionStore(db, 0, 0)
-	store.Create("concurrent-test", "", "", "", "")
+	store.Create(state.SessionParams{ID: "concurrent-test"})
 
 	const n = 10
 	var wg sync.WaitGroup
@@ -101,7 +102,7 @@ func TestPostgres_AddMessageConcurrent(t *testing.T) {
 func TestPostgres_NativeToolCallsRoundTrip(t *testing.T) {
 	db := pgDB(t)
 	store := NewSessionStore(db, 0, 0)
-	store.Create("tool-call-test", "", "", "", "")
+	store.Create(state.SessionParams{ID: "tool-call-test"})
 
 	calls := []provider.ToolCall{{
 		ID: "call_pg_1", Name: "tickets.show", Arguments: map[string]string{"id": "42"},
@@ -132,7 +133,7 @@ func TestPostgres_NativeToolCallsRoundTrip(t *testing.T) {
 	}
 
 	// Empty slice must persist as NULL on Postgres as well (no "[]" sentinel).
-	store.Create("empty-tool-calls", "", "", "", "")
+	store.Create(state.SessionParams{ID: "empty-tool-calls"})
 	if err := store.AddMessage("empty-tool-calls", provider.Message{
 		Role: provider.RoleAssistant, Content: "no tools", ToolCalls: []provider.ToolCall{},
 	}); err != nil {
@@ -214,9 +215,9 @@ func TestPostgres_SessionSystemSourceRoundTrip(t *testing.T) {
 	db := pgDB(t)
 	store := NewSessionStore(db, 0, 0)
 
-	store.Create("pg-chat", "e1", "g1", "chat", "")
-	store.Create("pg-sys", "e1", "g1", "system", "csv_mapping")
-	store.Create("pg-sys", "e1", "g1", "system", "other_feature")
+	store.Create(state.SessionParams{ID: "pg-chat", EntityID: "e1", GroupID: "g1", Kind: "chat"})
+	store.Create(state.SessionParams{ID: "pg-sys", EntityID: "e1", GroupID: "g1", Kind: "system", SystemSource: "csv_mapping"})
+	store.Create(state.SessionParams{ID: "pg-sys", EntityID: "e1", GroupID: "g1", Kind: "system", SystemSource: "other_feature"})
 
 	if src := sessionSystemSource(t, db, "pg-chat"); src.Valid {
 		t.Errorf("chat session system_source = %q, want NULL", src.String)

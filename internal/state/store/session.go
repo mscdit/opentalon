@@ -99,8 +99,8 @@ func (s *SessionStore) Get(id string) (*state.Session, error) {
 
 // Create inserts a new session. If id already exists (e.g. race), returns existing session from DB.
 //
-// kind is the session's interaction_kind ("chat" | "system"); an empty kind is
-// stored as "chat". systemSource is the per-feature label of the in-app feature
+// p.Kind is the session's interaction_kind ("chat" | "system"); an empty kind is
+// stored as "chat". p.SystemSource is the per-feature label of the in-app feature
 // that opened the session (migration 016); empty is stored as NULL, which is
 // what an ordinary human chat leaves behind.
 //
@@ -109,26 +109,27 @@ func (s *SessionStore) Get(id string) (*state.Session, error) {
 // existing row is returned untouched. That is what makes a chat session which
 // later receives an injected system turn keep its NULL source while that turn's
 // own usage row carries the feature label.
-func (s *SessionStore) Create(id, entityID, groupID, kind, systemSource string) *state.Session {
+func (s *SessionStore) Create(p state.SessionParams) *state.Session {
 	now := time.Now().UTC().Format(time.RFC3339)
+	kind := p.Kind
 	if kind == "" {
 		kind = "chat"
 	}
-	source := sql.NullString{String: systemSource, Valid: systemSource != ""}
+	source := sql.NullString{String: p.SystemSource, Valid: p.SystemSource != ""}
 	_, err := s.db.SQLDB().Exec(
 		s.db.Dialect().Rebind(`INSERT INTO sessions (id, summary, active_model, metadata, entity_id, group_id, interaction_kind, system_source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		id, "", "", "{}", entityID, groupID, kind, source, now, now)
+		p.ID, "", "", "{}", p.EntityID, p.GroupID, kind, source, now, now)
 	if err != nil {
-		if existing, e := s.Get(id); e == nil {
+		if existing, e := s.Get(p.ID); e == nil {
 			return existing
 		}
 		// Not the id race this path exists for: nothing was written and the
 		// caller cannot tell. Say so, or the first symptom is a message write
 		// failing later against a row that never existed.
 		slog.Warn("session insert failed with no existing row; continuing with a transient session",
-			"id", id, "error", err)
+			"id", p.ID, "error", err)
 		return &state.Session{
-			ID:        id,
+			ID:        p.ID,
 			Messages:  []provider.Message{},
 			Metadata:  map[string]string{},
 			CreatedAt: time.Now(),
@@ -136,7 +137,7 @@ func (s *SessionStore) Create(id, entityID, groupID, kind, systemSource string) 
 		}
 	}
 	return &state.Session{
-		ID:        id,
+		ID:        p.ID,
 		Messages:  []provider.Message{},
 		Metadata:  map[string]string{},
 		CreatedAt: time.Now(),

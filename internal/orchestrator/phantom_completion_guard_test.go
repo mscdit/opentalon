@@ -35,7 +35,7 @@ func phantomOrch(t *testing.T, responses []string) (*Orchestrator, *fakeLLM, str
 		t.Fatalf("register: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	llm := &fakeLLM{responses: responses}
 	parser := &fakeParser{parseFn: func(response string) []ToolCall {
 		switch {

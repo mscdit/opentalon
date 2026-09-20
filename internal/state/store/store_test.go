@@ -12,6 +12,7 @@ import (
 	"github.com/opentalon/opentalon/internal/actor"
 	"github.com/opentalon/opentalon/internal/config"
 	"github.com/opentalon/opentalon/internal/provider"
+	"github.com/opentalon/opentalon/internal/state"
 )
 
 func TestOpenAndMigrations(t *testing.T) {
@@ -100,7 +101,7 @@ func TestSessionStore_PersistAndGet(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 	err = sessStore.AddMessage("s1", provider.Message{Role: provider.RoleUser, Content: "hello"})
 	if err != nil {
 		t.Fatalf("AddMessage: %v", err)
@@ -145,7 +146,7 @@ func TestSessionStore_MessageVisibilityRoundTrip(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 	// A hidden (system-injected) user turn, then a normal visible assistant reply.
 	if err := sessStore.AddMessageWithMetadata("s1",
 		provider.Message{Role: provider.RoleUser, Content: "[system] job done", Visibility: provider.VisibilityHidden}, nil); err != nil {
@@ -184,7 +185,7 @@ func TestSessionStore_MaxMessagesTrim(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 3, 0) // keep last 3
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 	for i := 0; i < 5; i++ {
 		_ = sessStore.AddMessage("s1", provider.Message{Role: provider.RoleUser, Content: "msg"})
 	}
@@ -208,7 +209,7 @@ func TestSessionStore_SetTitleOnlyFillsEmpty(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 
 	// Fills the empty slot.
 	if err := sessStore.SetTitle("s1", "first title"); err != nil {
@@ -250,7 +251,7 @@ func TestSessionStore_SetSummaryRoundTrip(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 	_ = sessStore.AddMessage("s1", provider.Message{Role: provider.RoleUser, Content: "a"})
 	err = sessStore.SetSummary("s1", "Summary of past conversation.", []provider.Message{
 		{Role: provider.RoleUser, Content: "last user"},
@@ -278,7 +279,7 @@ func TestSessionStore_NativeToolCallsRoundTrip(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 
 	// Plain user turn — neither column should be populated.
 	if err := sessStore.AddMessage("s1", provider.Message{
@@ -366,7 +367,7 @@ func TestSessionStore_MessageMetadataRoundTrip(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 
 	// Plain turn via AddMessage — metadata column must be NULL.
 	if err := sessStore.AddMessage("s1", provider.Message{Role: provider.RoleUser, Content: "hi"}); err != nil {
@@ -437,7 +438,7 @@ func TestSessionStore_EmptyToolCallsSlicePersistsAsNull(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 
 	// Explicit empty (not nil) slice — must still write NULL, not "[]",
 	// so consumers can filter for rows with structured tool data via IS NOT NULL.
@@ -469,7 +470,7 @@ func TestSessionStore_SetSummaryPreservesToolCalls(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	sessStore := NewSessionStore(db, 0, 0)
-	sessStore.Create("s1", "", "", "", "")
+	sessStore.Create(state.SessionParams{ID: "s1"})
 
 	calls := []provider.ToolCall{{
 		ID: "call_x", Name: "items.list", Arguments: map[string]string{"q": "drone"},

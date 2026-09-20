@@ -53,7 +53,7 @@ func newLockerTestOrch(locker *recordingLocker, llm LLMClient) (*Orchestrator, *
 func TestRun_AcquiresAndReleasesSessionLocker(t *testing.T) {
 	locker := &recordingLocker{}
 	orch, sessions := newLockerTestOrch(locker, &fakeLLM{responses: []string{"reply"}})
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 
 	if _, err := orch.Run(context.Background(), "s1", "hello"); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -91,7 +91,7 @@ func TestRun_ReleasesSessionLockerOnError(t *testing.T) {
 // enough messages that maybeSummarizeSession attempts the rewrite.
 func seedSummarizableSession(t *testing.T, orch *Orchestrator, sessions *state.SessionStore, sessionID string) {
 	t.Helper()
-	sessions.Create(sessionID, "", "", "", "")
+	sessions.Create(state.SessionParams{ID: sessionID})
 	orch.summarizeAfterMessages = 2
 	orch.maxMessagesAfterSummary = 1
 	for i := 0; i < 3; i++ {
@@ -171,7 +171,7 @@ func TestRun_PropagatesSessionLockerError(t *testing.T) {
 	locker := &recordingLocker{lockErr: wantErr}
 	llm := &fakeLLM{responses: []string{"reply"}}
 	orch, sessions := newLockerTestOrch(locker, llm)
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 
 	if _, err := orch.Run(context.Background(), "s1", "hello"); !errors.Is(err, wantErr) {
 		t.Fatalf("expected locker error to propagate, got %v", err)

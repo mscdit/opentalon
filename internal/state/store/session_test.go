@@ -21,7 +21,7 @@ func TestSessionStore_ClearMessagesPreservesIdentityAndEvents(t *testing.T) {
 	store := NewSessionStore(db, 0, 0)
 
 	const sid = "sess-clear"
-	store.Create(sid, "entity-X", "group-Y", "", "")
+	store.Create(state.SessionParams{ID: sid, EntityID: "entity-X", GroupID: "group-Y"})
 
 	if err := store.AddMessage(sid, provider.Message{Role: provider.RoleUser, Content: "first"}); err != nil {
 		t.Fatalf("AddMessage[1]: %v", err)
@@ -150,7 +150,7 @@ func TestSessionStore_ClearMessagesIsIdempotent(t *testing.T) {
 	store := NewSessionStore(db, 0, 0)
 
 	const sid = "sess-empty"
-	store.Create(sid, "entity-X", "group-Y", "", "")
+	store.Create(state.SessionParams{ID: sid, EntityID: "entity-X", GroupID: "group-Y"})
 
 	if err := store.ClearMessages(sid); err != nil {
 		t.Fatalf("first ClearMessages: %v", err)
@@ -191,7 +191,7 @@ func TestSessionStore_CreateStoresSystemSourceOnce(t *testing.T) {
 	store := NewSessionStore(db, 0, 0)
 
 	const sid = "sess-system-source"
-	store.Create(sid, "entity-X", "group-Y", "system", "csv_mapping")
+	store.Create(state.SessionParams{ID: sid, EntityID: "entity-X", GroupID: "group-Y", Kind: "system", SystemSource: "csv_mapping"})
 
 	src := sessionSystemSource(t, db, sid)
 	if !src.Valid || src.String != "csv_mapping" {
@@ -200,7 +200,7 @@ func TestSessionStore_CreateStoresSystemSourceOnce(t *testing.T) {
 
 	// Same id, different label: the row already exists, so the insert conflicts
 	// and the original label survives.
-	store.Create(sid, "entity-X", "group-Y", "system", "other_feature")
+	store.Create(state.SessionParams{ID: sid, EntityID: "entity-X", GroupID: "group-Y", Kind: "system", SystemSource: "other_feature"})
 	if src := sessionSystemSource(t, db, sid); !src.Valid || src.String != "csv_mapping" {
 		t.Errorf("system_source after second create = %#v, want it unchanged at csv_mapping", src)
 	}
@@ -219,7 +219,7 @@ func TestSessionStore_ChatSessionKeepsNullSourceWhenSystemRunInjected(t *testing
 	usage := NewUsageStore(db)
 
 	const sid = "sess-chat-injected"
-	sessions.Create(sid, "entity-1", "group-1", "chat", "")
+	sessions.Create(state.SessionParams{ID: sid, EntityID: "entity-1", GroupID: "group-1", Kind: "chat"})
 
 	if err := usage.Record(context.Background(), UsageRecord{
 		EntityID: "entity-1", GroupID: "group-1", ChannelID: "websocket",

@@ -218,7 +218,10 @@ func NewMessageHandler(cfg HandlerConfig) pkg.MessageHandler {
 				return errorFrame(msg, "Something went wrong loading your conversation. Please try again.", "internal_error"), nil
 			}
 		} else {
-			cfg.CreateSession(sessionKey, entityID, groupID, interactionKind, systemSource)
+			cfg.CreateSession(state.SessionParams{
+				ID: sessionKey, EntityID: entityID, GroupID: groupID,
+				Kind: interactionKind, SystemSource: systemSource,
+			})
 		}
 
 		// Resume handshake: a reconnecting client sends one control frame right

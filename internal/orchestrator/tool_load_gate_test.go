@@ -29,7 +29,7 @@ func gateOrch(t *testing.T) (*Orchestrator, *countingExecutor) {
 		t.Fatalf("register: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{}, registry, state.NewMemoryStore(""), sessions, OrchestratorOpts{})
 	return orch, exec
 }
@@ -117,7 +117,7 @@ func TestExecuteCall_IgnoresStorePromotionNotInSentArray(t *testing.T) {
 		Name: "p", Actions: []Action{{Name: "catalog", Description: "Catalog-only."}},
 	}, exec)
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{}, registry, state.NewMemoryStore(""), sessions,
 		OrchestratorOpts{InjectionStateStore: store})
 
@@ -223,7 +223,7 @@ func TestMaybeRequireConfirmation_ToolNotInSentArrayNeverPrompts(t *testing.T) {
 		t.Fatalf("register conf: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{}, registry, state.NewMemoryStore(""), sessions, OrchestratorOpts{
 		ConfirmationPlugin: "conf",
 		ConfirmationAction: "check",
@@ -268,7 +268,7 @@ func TestMaybeRequireConfirmation_UnresolvableCallNeverPrompts(t *testing.T) {
 		t.Fatalf("register conf: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{}, registry, state.NewMemoryStore(""), sessions, OrchestratorOpts{
 		ConfirmationPlugin: "conf",
 		ConfirmationAction: "check",
@@ -316,7 +316,7 @@ func TestMaybeRequireConfirmation_InterruptedBatchRecordedBeforePrompt(t *testin
 		t.Fatalf("register conf: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{}, registry, state.NewMemoryStore(""), sessions, OrchestratorOpts{
 		ConfirmationPlugin: "conf",
 		ConfirmationAction: "check",
@@ -432,7 +432,7 @@ func interruptedTraceFixture(t *testing.T) (*Orchestrator, *state.SessionStore) 
 		t.Fatalf("register conf: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	orch := NewWithRules(&fakeLLM{}, &fakeParser{}, registry, state.NewMemoryStore(""), sessions, OrchestratorOpts{
 		ConfirmationPlugin: "conf",
 		ConfirmationAction: "check",
@@ -464,7 +464,7 @@ func TestRun_ConfirmationMidBatchLeavesNotExecutedTrace(t *testing.T) {
 		t.Fatalf("register conf: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	llm := &scriptedNativeLLM{rounds: []provider.CompletionResponse{
 		{ToolCalls: []provider.ToolCall{
 			{ID: "c-a", Name: "p__write_a", Arguments: map[string]string{"name": "A"}},
@@ -555,7 +555,7 @@ func TestRun_UnloadedToolRefusedThenLoadedAndRun(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	sessions := state.NewSessionStore("")
-	sessions.Create("s1", "", "", "", "")
+	sessions.Create(state.SessionParams{ID: "s1"})
 	llm := &scriptedNativeLLM{rounds: []provider.CompletionResponse{
 		{ToolCalls: []provider.ToolCall{{ID: "r1", Name: "p__catalog", Arguments: map[string]string{}}}},                             // blind call → refused
 		{ToolCalls: []provider.ToolCall{{ID: "r2", Name: "_meta__load_tools", Arguments: map[string]string{"names": "p__catalog"}}}}, // load it

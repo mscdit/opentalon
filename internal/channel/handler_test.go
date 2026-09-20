@@ -49,7 +49,7 @@ func (e *echoRunner) Run(_ context.Context, _ string, content string, _ ...pkg.F
 func baseHandlerConfig() HandlerConfig {
 	return HandlerConfig{
 		ResumeSession: func(_ string) error { return nil },
-		CreateSession: func(_, _, _, _, _ string) {},
+		CreateSession: func(state.SessionParams) {},
 		Runner:        &echoRunner{},
 		RunAction: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
 			return "", errors.New("no actions")
@@ -174,7 +174,7 @@ func TestHandler_StampsGroupIDFromProfile(t *testing.T) {
 	cfg := baseHandlerConfig()
 	cfg.Runner = runner
 	cfg.Verifier = &stubVerifier{p: &profile.Profile{EntityID: "u1", Group: "g1"}}
-	cfg.CreateSession = func(_, _, group, _, _ string) { createdGroup = group }
+	cfg.CreateSession = func(p state.SessionParams) { createdGroup = p.GroupID }
 	h := NewMessageHandler(cfg)
 
 	out := callHandler(h, map[string]string{"profile_token": "tok"})
@@ -201,7 +201,7 @@ func TestHandler_StampsKindAndSystemSourceFromProfile(t *testing.T) {
 	cfg.Verifier = &stubVerifier{p: &profile.Profile{
 		EntityID: "u1", Kind: profile.KindSystem, SystemSource: "csv_mapping",
 	}}
-	cfg.CreateSession = func(_, _, _, kind, source string) { createdKind, createdSource = kind, source }
+	cfg.CreateSession = func(p state.SessionParams) { createdKind, createdSource = p.Kind, p.SystemSource }
 	h := NewMessageHandler(cfg)
 
 	callHandler(h, map[string]string{"profile_token": "tok"})
@@ -373,8 +373,8 @@ func (r *sessionRecorder) resumeFunc() pkg.ResumeSessionFunc {
 }
 
 func (r *sessionRecorder) createFunc() pkg.CreateSessionFunc {
-	return func(key, _, _, _, _ string) {
-		r.creates = append(r.creates, key)
+	return func(p state.SessionParams) {
+		r.creates = append(r.creates, p.ID)
 	}
 }
 
@@ -651,7 +651,7 @@ func TestHandler_NewMessageHandler_PanicsOnNilResumeSession(t *testing.T) {
 	}()
 	NewMessageHandler(HandlerConfig{
 		ResumeSession: nil,
-		CreateSession: func(_, _, _, _, _ string) {},
+		CreateSession: func(state.SessionParams) {},
 		Runner:        &echoRunner{},
 	})
 }
@@ -677,7 +677,7 @@ func TestHandler_NewMessageHandler_PanicsOnNilRunner(t *testing.T) {
 	}()
 	NewMessageHandler(HandlerConfig{
 		ResumeSession: func(_ string) error { return nil },
-		CreateSession: func(_, _, _, _, _ string) {},
+		CreateSession: func(state.SessionParams) {},
 		Runner:        nil,
 	})
 }

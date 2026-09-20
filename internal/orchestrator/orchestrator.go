@@ -250,11 +250,9 @@ type MemoryStoreInterface interface {
 // SessionStoreInterface is the session store (in-memory or SQLite).
 type SessionStoreInterface interface {
 	Get(id string) (*state.Session, error)
-	// Create mints a session row; kind is its interaction_kind and
-	// systemSource the per-feature label of the feature that opened it
-	// (both empty for an ordinary chat). Idempotent: an existing id keeps
-	// the labels it was created with.
-	Create(id, entityID, groupID, kind, systemSource string) *state.Session
+	// Create mints a session row from p (see state.SessionParams).
+	// Idempotent: an existing id keeps the labels it was created with.
+	Create(p state.SessionParams) *state.Session
 	AddMessage(id string, msg provider.Message) error
 	// AddMessageWithMetadata is AddMessage plus a small JSON map persisted on
 	// the message row and surfaced only by the transcript reader (never fed to
