@@ -81,6 +81,8 @@ Authorization: Bearer <token>
 | `group` | No | Group name. Used to look up allowed plugins in the `group_plugins` table. |
 | `plugins` | No | Plugin IDs allowed for this group. Auto-saved to DB (see [Dynamic plugin assignments](#dynamic-plugin-assignments)). |
 | `model` | No | Model override for this profile (e.g. `"anthropic/claude-3-5-sonnet-20241022"`). Overrides the server default for this request. |
+| `kind` | No | `chat` (default) for a person's turn, `system` for a run a backend feature started on a user's behalf. Stamped on the session row at creation (`sessions.interaction_kind`) and on every usage row. |
+| `system_source` | No | Name of the feature behind a `system` run, e.g. `job_notify`. A response that names a source but omits `kind` is read as `system`. Stamped once on the session that the run opened (`sessions.system_source`, NULL for chat) and on each usage row; see [Run labels](#run-labels). |
 
 ### Full WhoAmI config
 
@@ -302,6 +304,15 @@ ORDER BY SUM(input_tokens) DESC;
 Fields: `id`, `entity_id`, `group_id`, `channel_id`, `session_id`, `model_id`, `input_tokens`, `output_tokens`, `tool_calls`, `input_cost`, `output_cost`, `interaction_kind`, `system_source`, `created_at`.
 
 `interaction_kind` is `chat` (a human turn) or `system` (a backend-originated run, e.g. a job-completion note); `system_source` is a per-feature label for system runs (e.g. `job_notify`), NULL for chat. The interactive spend-limit query (see `TotalTokensSince`) counts only `interaction_kind = 'chat'`, so system runs are attributed but never charged against the customer's chat budget.
+
+### Run labels
+
+The two labels live in two places on purpose:
+
+- `sessions.interaction_kind` / `sessions.system_source` say which feature **opened** the conversation. Written once when the session is created, from the run's profile, never updated: a chat session that later receives an injected system turn stays `chat` with a NULL source. A session list for end users filters on these (the api-plugin exposes them as `kind` and `system_source`).
+- `profile_usage.interaction_kind` / `profile_usage.system_source` say which feature **drove each run**, for cost attribution — the injected turn above records its own label here.
+
+Tool plugins can receive the current run's labels as injected context arguments; see [Context arguments the host injects](extensibility.md#context-arguments-the-host-injects).
 
 `input_cost` and `output_cost` are computed from the model's configured price per million tokens (set in `models.providers.<id>.models[].cost`). They will be zero if the model has no cost configured or if no model was recorded.
 

@@ -11,6 +11,9 @@ import (
 type stubSessionStore struct {
 	sessions map[string]*state.Session
 	getCalls int
+	// labels Create was told per id, so the cached wrapper's forwarding of
+	// the write-once session labels is observable.
+	created map[string][2]string
 }
 
 func newStubSessionStore() *stubSessionStore {
@@ -33,6 +36,10 @@ func (s *stubSessionStore) Get(id string) (*state.Session, error) {
 func (s *stubSessionStore) Create(id, entityID, groupID, kind, systemSource string) *state.Session {
 	sess := &state.Session{ID: id, Messages: []provider.Message{}}
 	s.sessions[id] = sess
+	if s.created == nil {
+		s.created = map[string][2]string{}
+	}
+	s.created[id] = [2]string{kind, systemSource}
 	return sess
 }
 
@@ -265,5 +272,19 @@ func TestCachedStore_PromptTypeReachesCache(t *testing.T) {
 	}
 	if got := stripApprovedConfirmationExchanges(sess.Messages); len(got) != 0 {
 		t.Fatalf("resolved exchange must strip from cached history, %d rows survived", len(got))
+	}
+}
+
+// The cache wraps Create without looking at the labels; it must still hand
+// both to the inner store, or a system session minted through the cache
+// would land as an unlabelled chat.
+func TestCachedSessionStore_CreateForwardsLabels(t *testing.T) {
+	stub := newStubSessionStore()
+	cached := newCachedSessionStore(stub)
+
+	cached.Create("s-sys", "e1", "g1", "system", "csv_mapping")
+
+	if got := stub.created["s-sys"]; got != [2]string{"system", "csv_mapping"} {
+		t.Errorf("inner Create got (kind, source) = %v, want (system, csv_mapping)", got)
 	}
 }

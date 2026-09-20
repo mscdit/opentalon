@@ -304,7 +304,14 @@ func applyCallbackIdentity(ctx context.Context, in map[string]string) (context.C
 	}
 
 	if entityID != "" || groupID != "" {
-		ctx = profile.WithProfile(ctx, &profile.Profile{EntityID: entityID, Group: groupID})
+		p := &profile.Profile{EntityID: entityID, Group: groupID}
+		// The callback changes WHO the nested chain runs as, not WHICH run
+		// it belongs to: a verified turn's labels stay on the chain, so a
+		// leaf tool still learns it is inside e.g. a system run.
+		if outer := profile.FromContext(ctx); outer != nil {
+			p.Kind, p.SystemSource = outer.Kind, outer.SystemSource
+		}
+		ctx = profile.WithProfile(ctx, p)
 		ctx = actor.WithActor(ctx, entityID)
 	}
 	if sessionID != "" {

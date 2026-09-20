@@ -696,3 +696,29 @@ func (s *stubGroupSaver) UpsertGroupPlugins(_ context.Context, groupID string, p
 	s.saved[groupID] = append(s.saved[groupID], pluginIDs...)
 	return nil
 }
+
+// TestVerifier_SourceWithoutKindIsSystemRun: a source is only ever minted for
+// a system run, so a WhoAmI response that names one but omits kind must not
+// fall into the "absent ⇒ chat" default — that would persist a feature label
+// on what the store then treats as a person's own conversation.
+func TestVerifier_SourceWithoutKindIsSystemRun(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"entity_id":     "user-1",
+			"system_source": "csv_mapping",
+		})
+	}))
+	defer srv.Close()
+
+	v := NewVerifier(VerifierConfig{URL: srv.URL, CacheTTL: 100 * time.Millisecond}, &stubGroupSaver{saved: map[string][]string{}}, nil)
+	p, err := v.Verify(context.Background(), "tok", "", nil)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if p.Kind != KindSystem {
+		t.Errorf("Kind = %q, want %q when a source is named", p.Kind, KindSystem)
+	}
+	if p.SystemSource != "csv_mapping" {
+		t.Errorf("SystemSource = %q, want csv_mapping", p.SystemSource)
+	}
+}

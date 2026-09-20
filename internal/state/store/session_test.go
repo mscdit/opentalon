@@ -243,3 +243,34 @@ func TestSessionStore_ChatSessionKeepsNullSourceWhenSystemRunInjected(t *testing
 		t.Errorf("usage system_source = %#v, want valid job_notify", usageSource)
 	}
 }
+
+// Migration 016's index is partial: ordinary chats leave the column NULL and
+// no reader asks IS NULL through it, so a full index would mostly hold NULLs.
+func TestSessionStore_SystemSourceIndexIsPartial(t *testing.T) {
+	db := openTestDB(t)
+
+	rows, err := db.SQLDB().Query(`PRAGMA index_list('sessions')`)
+	if err != nil {
+		t.Fatalf("PRAGMA index_list: %v", err)
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var seq int
+		var name, origin string
+		var unique, partial int
+		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
+			t.Fatalf("scan index_list: %v", err)
+		}
+		if name != "idx_sessions_system_source" {
+			continue
+		}
+		found = true
+		if partial != 1 {
+			t.Errorf("idx_sessions_system_source partial = %d, want 1 (WHERE system_source IS NOT NULL)", partial)
+		}
+	}
+	if !found {
+		t.Error("idx_sessions_system_source not created by migration 016")
+	}
+}

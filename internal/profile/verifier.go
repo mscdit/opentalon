@@ -437,11 +437,18 @@ func (v *Verifier) callServer(ctx context.Context, token, channelType string, me
 	model := jsonString(raw[v.cfg.ModelField])
 	channelTypeResp := jsonString(raw[v.cfg.ChannelTypeField])
 	name := jsonString(raw[v.cfg.NameField])
+	systemSource := jsonString(raw[v.cfg.SystemSourceField])
 	kind := jsonString(raw[v.cfg.KindField])
 	if kind == "" {
-		kind = KindChat // absent ⇒ chat; track the constant, not a bare literal
+		// Absent ⇒ chat, so a legacy WhoAmI server is never misread as a
+		// system run — unless it named a feature: a source is only ever
+		// minted for a system run, and a "chat" carrying one would persist a
+		// feature label on a person's own conversation.
+		kind = KindChat
+		if systemSource != "" {
+			kind = KindSystem
+		}
 	}
-	systemSource := jsonString(raw[v.cfg.SystemSourceField])
 
 	var limit int
 	if lraw, ok := raw[v.cfg.LimitField]; ok {

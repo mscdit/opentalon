@@ -52,9 +52,11 @@ func TestDefaultContextArgProviders_GroupEntity(t *testing.T) {
 }
 
 // TestDefaultContextArgProviders_RunLabels locks in the run-label wiring:
-// interaction_kind / system_source resolve off the verified profile, are
-// reported verbatim, and are EMPTY when no profile is on the context — so an
-// unlabelled run reaches a plugin as an absent arg rather than a guessed one.
+// interaction_kind / system_source resolve off the profile as stored and are
+// EMPTY when no profile is on the context — so an unlabelled run reaches a
+// plugin as an absent arg rather than a guessed one. (The verifier never
+// produces an empty Kind; the last case pins that the provider does not
+// paper over a hand-built profile that has none.)
 func TestDefaultContextArgProviders_RunLabels(t *testing.T) {
 	providers := defaultContextArgProviders(nil, nil)
 
@@ -83,7 +85,7 @@ func TestDefaultContextArgProviders_RunLabels(t *testing.T) {
 			wantSource: "nightly_report",
 		},
 		{
-			name:    "empty kind is reported empty, not defaulted to chat",
+			name:    "a profile built without a kind is reported as is",
 			profile: &profile.Profile{},
 		},
 	}

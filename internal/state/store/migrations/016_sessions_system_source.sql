@@ -32,7 +32,12 @@
 -- column (same rule as migrations 013, 014 and 015).
 ALTER TABLE sessions ADD COLUMN system_source TEXT;
 
--- Session-list filtering by feature (api-plugin read path) — the same reason
--- migration 014 indexed sessions(interaction_kind), for the same read path.
+-- Session-list filtering by feature (api-plugin read path). Partial, unlike
+-- migration 014's index on interaction_kind: ordinary chats — nearly every
+-- row — leave this column NULL, and no reader asks "IS NULL" through an
+-- index (the customer's list narrows by entity first, then by kind), so a
+-- full index would mostly hold NULLs. Both dialects support the form. On
+-- PostgreSQL this is a plain build inside the migration transaction, like
+-- every index the migrations create.
 CREATE INDEX IF NOT EXISTS idx_sessions_system_source
-  ON sessions(system_source);
+  ON sessions(system_source) WHERE system_source IS NOT NULL;

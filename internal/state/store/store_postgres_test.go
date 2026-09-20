@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -202,5 +203,35 @@ func TestPostgres_SessionEventStoreRoundTrip(t *testing.T) {
 	}
 	if content != "first" {
 		t.Errorf("content = %q, want %q (idempotent ON CONFLICT DO NOTHING)", content, "first")
+	}
+}
+
+// The session labels cross the Postgres driver as sql.NullString: "" must
+// land as NULL (no "" sentinel, the same rule the empty tool_calls test pins),
+// a value as itself, and the id conflict must keep the first writer's label.
+// Migration 016's partial index has to exist on this dialect too.
+func TestPostgres_SessionSystemSourceRoundTrip(t *testing.T) {
+	db := pgDB(t)
+	store := NewSessionStore(db, 0, 0)
+
+	store.Create("pg-chat", "e1", "g1", "chat", "")
+	store.Create("pg-sys", "e1", "g1", "system", "csv_mapping")
+	store.Create("pg-sys", "e1", "g1", "system", "other_feature")
+
+	if src := sessionSystemSource(t, db, "pg-chat"); src.Valid {
+		t.Errorf("chat session system_source = %q, want NULL", src.String)
+	}
+	if src := sessionSystemSource(t, db, "pg-sys"); !src.Valid || src.String != "csv_mapping" {
+		t.Errorf("system session system_source = %#v, want the first writer's csv_mapping", src)
+	}
+
+	var indexdef string
+	if err := db.SQLDB().QueryRow(
+		`SELECT indexdef FROM pg_indexes WHERE tablename = 'sessions' AND indexname = 'idx_sessions_system_source'`,
+	).Scan(&indexdef); err != nil {
+		t.Fatalf("idx_sessions_system_source missing on postgres: %v", err)
+	}
+	if !strings.Contains(indexdef, "IS NOT NULL") {
+		t.Errorf("indexdef = %q, want a partial index (WHERE system_source IS NOT NULL)", indexdef)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/opentalon/opentalon/internal/provider"
@@ -121,6 +122,11 @@ func (s *SessionStore) Create(id, entityID, groupID, kind, systemSource string) 
 		if existing, e := s.Get(id); e == nil {
 			return existing
 		}
+		// Not the id race this path exists for: nothing was written and the
+		// caller cannot tell. Say so, or the first symptom is a message write
+		// failing later against a row that never existed.
+		slog.Warn("session insert failed with no existing row; continuing with a transient session",
+			"id", id, "error", err)
 		return &state.Session{
 			ID:        id,
 			Messages:  []provider.Message{},
