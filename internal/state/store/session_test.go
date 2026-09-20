@@ -253,7 +253,7 @@ func TestSessionStore_SystemSourceIndexIsPartial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PRAGMA index_list: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	found := false
 	for rows.Next() {
 		var seq int
